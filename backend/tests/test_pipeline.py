@@ -52,3 +52,21 @@ class TestPipeline(unittest.TestCase):
         accepted, rejected = transform_records([row, row])
         self.assertEqual(len(accepted), 1)
         self.assertEqual(rejected[0]["reason"], "Duplicate order line")
+
+    def test_pipeline_mode_rejects_missing_or_malformed_dates(self):
+        row = {
+            "order_id": "ORDER-2",
+            "line_number": "1",
+            "product": "Desk",
+            "category": "Home",
+            "quantity": "1",
+            "unit_price": "100",
+        }
+        accepted, rejected = transform_records([row], require_order_date=True)
+        self.assertEqual(accepted, [])
+        self.assertIn("order_date", rejected[0]["reason"])
+
+        row["order_date"] = "not-a-date"
+        accepted, rejected = transform_records([row], require_order_date=True)
+        self.assertEqual(accepted, [])
+        self.assertEqual(len(rejected), 1)

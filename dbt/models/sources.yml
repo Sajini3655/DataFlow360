@@ -1,0 +1,15 @@
+version: 2
+
+sources:
+  - name: warehouse
+    schema: public
+    tables:
+      - name: silver_sales
+        description: Validated sales line items; the warehouse source of truth.
+      - name: dim_customer
+      - name: dim_category
+      - name: dim_product
+      - name: dim_supplier
+      - name: dim_region
+      - name: dim_date
+      - name: inventory_fact

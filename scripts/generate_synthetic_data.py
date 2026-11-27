@@ -1,3 +1,4 @@
+import argparse
 import csv
 import json
 import random
@@ -8,6 +9,15 @@ ROOT = Path(__file__).resolve().parents[1]
 DATA = ROOT / "data"
 DATA.mkdir(exist_ok=True)
 
+parser = argparse.ArgumentParser(description="Generate reproducible synthetic sales datasets.")
+parser.add_argument(
+    "--records",
+    type=int,
+    choices=(50000, 100000, 500000, 1000000),
+    default=50000,
+    help="Number of valid base transactions before controlled quality variants.",
+)
+record_count = parser.parse_args().records
 random.seed(360)
 start = date(2026, 1, 1)
 
@@ -55,14 +65,30 @@ def valid_transaction(index):
         "unit_price": round(unit_price, 2),
     }
 
-rows = [valid_transaction(i) for i in range(1, 50001)]
+rows = [valid_transaction(i) for i in range(1, record_count + 1)]
 
-# Controlled quality variants: roughly 1.5% missing, 1.5% duplicate, 1% malformed, 1.5% invalid.
+# Controlled quality variants are scaled with the base dataset size.
+missing_count = int(record_count * 0.015)
+duplicate_count = int(record_count * 0.015)
+malformed_count = int(record_count * 0.01)
+invalid_count = int(record_count * 0.015)
 quality = []
-quality.extend({**valid_transaction(50001+i), "order_id": ""} for i in range(750))
-quality.extend({**rows[i]} for i in range(0, 750))
-quality.extend({**valid_transaction(51001+i), "unit_price": "not-a-price"} for i in range(500))
-quality.extend({**valid_transaction(52001+i), "quantity": 0} for i in range(750))
+next_id = record_count + 1
+quality.extend(
+    {**valid_transaction(next_id + i), "order_id": ""}
+    for i in range(missing_count)
+)
+quality.extend({**rows[i]} for i in range(duplicate_count))
+next_id += missing_count
+quality.extend(
+    {**valid_transaction(next_id + i), "unit_price": "not-a-price"}
+    for i in range(malformed_count)
+)
+next_id += malformed_count
+quality.extend(
+    {**valid_transaction(next_id + i), "quantity": 0}
+    for i in range(invalid_count)
+)
 
 all_rows = rows + quality
 random.shuffle(all_rows)
@@ -89,9 +115,9 @@ with (DATA / "products.csv").open("w", newline="", encoding="utf-8") as f:
 
 print(json.dumps({
     "raw_transactions": len(all_rows),
-    "valid_attempts": len(rows),
-    "missing": 750,
-    "duplicates": 750,
-    "malformed": 500,
-    "invalid": 750,
+    "valid_base_transactions": len(rows),
+    "missing": missing_count,
+    "duplicates": duplicate_count,
+    "malformed": malformed_count,
+    "invalid": invalid_count,
 }, indent=2))

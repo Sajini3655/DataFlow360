@@ -1,7 +1,61 @@
 version: 2
 
-sources:
-  - name: dataflow360
-    schema: public
-    tables:
-      - name: clean_sales
+models:
+  - name: stg_sales
+    columns:
+      - name: order_id
+        data_tests: [not_null]
+      - name: line_number
+        data_tests: [not_null]
+      - name: quantity
+        data_tests: [not_null]
+  - name: fct_sales_line
+    data_tests:
+      - unique_combination_of_columns:
+          combination_of_columns: [order_id, line_number]
+    columns:
+      - name: order_id
+        data_tests: [not_null]
+      - name: line_number
+        data_tests: [not_null]
+      - name: revenue
+        data_tests: [not_null]
+      - name: customer_key
+        data_tests:
+          - relationships:
+              to: ref('stg_customers')
+              field: customer_key
+      - name: product_key
+        data_tests:
+          - relationships:
+              to: ref('stg_products')
+              field: product_key
+      - name: supplier_key
+        data_tests:
+          - relationships:
+              to: ref('stg_suppliers')
+              field: supplier_key
+      - name: region_key
+        data_tests:
+          - relationships:
+              to: ref('stg_regions')
+              field: region_key
+      - name: date_key
+        data_tests:
+          - relationships:
+              to: source('warehouse', 'dim_date')
+              field: date_key
+  - name: daily_sales
+    columns:
+      - name: order_date
+        data_tests: [not_null]
+      - name: revenue
+        data_tests: [not_null]
+  - name: customer_lifetime_value
+    columns:
+      - name: customer_id
+        data_tests: [unique, not_null]
+      - name: customer_segment
+        data_tests:
+          - accepted_values:
+              values: ['low', 'medium', 'high']

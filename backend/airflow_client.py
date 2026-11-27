@@ -33,11 +33,11 @@ def _request(path, method="GET", body=None, timeout=15):
         raise AirflowError(f"Airflow API request failed: {exc}") from exc
 
 
-def trigger_dag(source, incremental):
+def trigger_dag(source, incremental, engine="pandas"):
     return _request(
         "dags/dataflow360_daily_pipeline/dagRuns",
         method="POST",
-        body={"conf": {"source": source, "incremental": incremental}},
+        body={"conf": {"source": source, "incremental": incremental, "engine": engine}},
     )
 
 
@@ -46,14 +46,46 @@ def get_dag_run(dag_run_id):
     encoded_run_id = quote(dag_run_id, safe="")
     run = _request(f"dags/{dag}/dagRuns/{encoded_run_id}")
     tasks = _request(f"dags/{dag}/dagRuns/{encoded_run_id}/taskInstances")
+    dag_info = _request(f"dags/{dag}")
+    task_instances = []
+    for task in tasks.get("task_instances", []):
+        task_instances.append(
+            {
+                "task_id": task.get("task_id"),
+                "state": task.get("state"),
+                "start_date": task.get("start_date"),
+                "end_date": task.get("end_date"),
+                "duration": task.get("duration"),
+                "try_number": task.get("try_number"),
+                "max_tries": task.get("max_tries"),
+                "log_url": task.get("log_url"),
+            }
+        )
     return {
         "dag_id": dag,
         "dag_run_id": dag_run_id,
         "state": run.get("state"),
         "start_date": run.get("start_date"),
         "end_date": run.get("end_date"),
-        "tasks": [
-            {"task_id": task.get("task_id"), "state": task.get("state")}
-            for task in tasks.get("task_instances", [])
-        ],
+        "duration": run.get("duration"),
+        "scheduled_run": run.get("run_type") == "scheduled",
+        "schedule": dag_info.get("timetable_description")
+        or dag_info.get("schedule_interval"),
+        "tasks": task_instances,
     }
+
+
+def retry_failed_task(dag_run_id, task_id):
+    if not task_id.strip():
+        raise ValueError("Task ID cannot be empty")
+    dag = "dataflow360_daily_pipeline"
+    return _request(
+        f"dags/{dag}/clearTaskInstances",
+        method="POST",
+        body={
+            "dry_run": False,
+            "task_ids": [task_id],
+            "dag_run_id": dag_run_id,
+            "only_failed": True,
+        },
+    )

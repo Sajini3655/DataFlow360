@@ -24,6 +24,7 @@ services:
       AIRFLOW_PASSWORD: "${AIRFLOW_PASSWORD:?Set AIRFLOW_PASSWORD in .env}"
       PIPELINE_INTERNAL_TOKEN: "${PIPELINE_INTERNAL_TOKEN:?Set PIPELINE_INTERNAL_TOKEN in .env}"
       PARQUET_DIR: /app/parquet
+      SPARK_RUNNER_URL: http://spark-runner:8083
     ports: ['8000:8000']
     volumes:
       - ./data:/app/data
@@ -80,6 +81,9 @@ services:
       AIRFLOW__WEBSERVER__RBAC: 'true'
       AIRFLOW__WEBSERVER__WORKERS: '1'
       AIRFLOW__API__AUTH_BACKENDS: 'airflow.api.auth.backend.basic_auth,airflow.api.auth.backend.session'
+      DBT_ENABLED: "${DBT_ENABLED:-false}"
+      DBT_RUNNER_URL: http://dbt-runner:8080
+      SPARK_RUNNER_URL: http://spark-runner:8083
     volumes:
       - ./airflow/dags:/opt/airflow/dags
       - airflowlogs:/opt/airflow/logs
@@ -110,6 +114,110 @@ services:
         condition: service_healthy
       airflow-init:
         condition: service_completed_successfully
+  dbt:
+    build:
+      context: ./dbt
+      dockerfile: Dockerfile
+    profiles: ['dbt']
+    environment:
+      DBT_HOST: db
+      DBT_PORT: '5432'
+      DBT_USER: "${POSTGRES_USER:?Set POSTGRES_USER in .env}"
+      DBT_PASSWORD: "${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}"
+      DBT_DATABASE: "${POSTGRES_DB:?Set POSTGRES_DB in .env}"
+      DBT_SCHEMA: analytics
+    volumes:
+      - ./dbt:/usr/app
+    depends_on:
+      db:
+        condition: service_healthy
+  dbt-runner:
+    build:
+      context: ./dbt
+      dockerfile: Dockerfile
+    profiles: ['dbt']
+    entrypoint: ['uvicorn']
+    command: ['runner:app', '--host', '0.0.0.0', '--port', '8080']
+    environment:
+      DBT_HOST: db
+      DBT_PORT: '5432'
+      DBT_USER: "${POSTGRES_USER:?Set POSTGRES_USER in .env}"
+      DBT_PASSWORD: "${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}"
+      DBT_DATABASE: "${POSTGRES_DB:?Set POSTGRES_DB in .env}"
+      DBT_SCHEMA: analytics
+      PIPELINE_INTERNAL_TOKEN: "${PIPELINE_INTERNAL_TOKEN:?Set PIPELINE_INTERNAL_TOKEN in .env}"
+    ports: ['8081:8080']
+    volumes:
+      - ./dbt:/usr/app
+    depends_on:
+      db:
+        condition: service_healthy
+  spark-master:
+    build:
+      context: .
+      dockerfile: spark/Dockerfile
+    profiles: ['spark']
+    command:
+      - spark-class
+      - org.apache.spark.deploy.master.Master
+      - --host
+      - spark-master
+      - --port
+      - '7077'
+      - --webui-port
+      - '8080'
+    ports: ['7077:7077', '8082:8080']
+    mem_limit: 2g
+    healthcheck:
+      test: [CMD-SHELL, 'curl --fail http://localhost:8080/ >/dev/null']
+      interval: 10s
+      timeout: 5s
+      retries: 12
+  spark-worker:
+    build:
+      context: .
+      dockerfile: spark/Dockerfile
+    profiles: ['spark']
+    command:
+      - spark-class
+      - org.apache.spark.deploy.worker.Worker
+      - spark://spark-master:7077
+      - --cores
+      - '2'
+      - --memory
+      - 2g
+    mem_limit: 2g
+    depends_on:
+      spark-master:
+        condition: service_healthy
+  spark-runner:
+    build:
+      context: .
+      dockerfile: spark/Dockerfile
+    profiles: ['spark']
+    environment:
+      DATABASE_URL: "postgresql://${POSTGRES_USER:?Set POSTGRES_USER in .env}:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}@db:5432/${POSTGRES_DB:?Set POSTGRES_DB in .env}"
+      PIPELINE_INTERNAL_TOKEN: "${PIPELINE_INTERNAL_TOKEN:?Set PIPELINE_INTERNAL_TOKEN in .env}"
+      DATA_DIR: /app/data
+      SPARK_OUTPUT_DIR: /app/parquet/spark
+      SPARK_MASTER_URL: spark://spark-master:7077
+      SPARK_DRIVER_HOST: spark-runner
+    ports: ['8083:8083']
+    volumes:
+      - ./data:/app/data
+      - ./data/parquet:/app/parquet
+    healthcheck:
+      test: [CMD-SHELL, 'curl --fail http://localhost:8083/health']
+      interval: 10s
+      timeout: 5s
+      retries: 6
+    depends_on:
+      db:
+        condition: service_healthy
+      spark-master:
+        condition: service_healthy
+      spark-worker:
+        condition: service_started
 volumes:
   pgdata:
   airflowpgdata:

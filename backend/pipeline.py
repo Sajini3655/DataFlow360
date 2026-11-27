@@ -1,5 +1,6 @@
 from decimal import Decimal, InvalidOperation
 import csv
+from datetime import date
 from pathlib import Path
 
 
@@ -8,7 +9,7 @@ def transform(path):
         return transform_records(list(csv.DictReader(f)))
 
 
-def transform_records(records):
+def transform_records(records, require_order_date=False):
     accepted = []
     rejected = []
     seen = set()
@@ -20,8 +21,13 @@ def transform_records(records):
             category = str(row.get("category") or "").strip()
             quantity = int(row["quantity"])
             price = Decimal(str(row["unit_price"]))
+            order_date = str(row.get("order_date") or "").strip()
             if not key or not product or not category:
                 raise ValueError("Missing required fields")
+            if require_order_date and not order_date:
+                raise ValueError("Missing required field: order_date")
+            if order_date:
+                date.fromisoformat(order_date)
             if quantity <= 0:
                 raise ValueError("Quantity must be positive")
             if not price.is_finite() or price < 0:
@@ -42,7 +48,7 @@ def transform_records(records):
                 "category": category,
                 "supplier_id": str(row.get("supplier_id") or "").strip(),
                 "region": str(row.get("region") or "").strip(),
-                "order_date": str(row.get("order_date") or "").strip(),
+                "order_date": order_date,
                 "quantity": quantity,
                 "unit_price": price,
             })

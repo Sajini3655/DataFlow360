@@ -2,8 +2,8 @@
 import {useEffect,useState} from 'react';
 import Link from 'next/link';
 const API=process.env.NEXT_PUBLIC_API_URL||'http://localhost:8000';
-const names=['Overview','Sources','Data Quality','Medallion','Star Schema','Analytics','Inventory','Airflow'];
-const paths=['/','/sources','/quality','/medallion','/star-schema','/analytics','/inventory','/airflow'];
+const names=['Overview','Sources','Data Quality','Medallion','Star Schema','Analytics','Inventory','Processing','Airflow'];
+const paths=['/','/sources','/quality','/medallion','/star-schema','/analytics','/inventory','/processing','/airflow'];
 export default function Analytics(){
  const [data,setData]=useState<any>(null),[category,setCategory]=useState(''),[region,setRegion]=useState('');
  const [startDate,setStartDate]=useState(''),[endDate,setEndDate]=useState('');

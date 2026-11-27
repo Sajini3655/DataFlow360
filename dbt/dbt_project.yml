@@ -1,5 +1,24 @@
 name: dataflow360
-version: '1.0'
+version: '0.3.0'
 config-version: 2
 profile: dataflow360
 model-paths: ["models"]
+test-paths: ["tests"]
+macro-paths: ["macros"]
+seed-paths: ["seeds"]
+snapshot-paths: ["snapshots"]
+clean-targets: ["target", "dbt_packages"]
+
+models:
+  dataflow360:
+    staging:
+      +materialized: view
+    intermediate:
+      +materialized: view
+    marts:
+      +materialized: table
+
+seeds:
+  dataflow360:
+    +column_types:
+      minimum_revenue: numeric
