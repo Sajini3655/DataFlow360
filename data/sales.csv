@@ -1,0 +1,11 @@
+order_id,product,category,quantity,unit_price
+O001,Laptop,Electronics,3,850
+O002,Monitor,Electronics,8,220
+O003,Desk,Furniture,5,180
+O004,Chair,Furniture,12,95
+O005,Notebook,Office supplies,100,4.5
+O006,Pen,Office supplies,200,1.5
+O007,Keyboard,Electronics,15,45
+O008,Desk,Furniture,2,180
+O008,Desk,Furniture,2,180
+O009,Mouse,Electronics,-2,30

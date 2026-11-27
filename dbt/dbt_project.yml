@@ -1,0 +1,5 @@
+name: dataflow360
+version: '1.0'
+config-version: 2
+profile: dataflow360
+model-paths: ["models"]

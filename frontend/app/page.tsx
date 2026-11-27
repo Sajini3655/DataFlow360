@@ -1,0 +1,11 @@
+'use client';
+import {useEffect,useState} from 'react';
+import Link from 'next/link';
+const API=process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+const pages=[['Overview','/'],['Sources','/sources'],['Data Quality','/quality'],['Medallion','/medallion'],['Star Schema','/star-schema'],['Analytics','/analytics'],['Inventory','/inventory'],['Airflow','/airflow']];
+export default function Page(){
+ const [data,setData]=useState<any>(null),[error,setError]=useState('');
+ useEffect(()=>{fetch(`${API}/overview`).then(r=>r.ok?r.json():Promise.reject()).then(setData).catch(()=>setError('Unable to load backend data'))},[]);
+ const money=(v:any)=>Number(v||0).toLocaleString('en-US',{style:'currency',currency:'USD'});
+ return <div className="shell"><aside><div className="brand"><span>◆</span> DataFlow<span className="accent">360</span></div><small>DATA OPERATIONS</small>{pages.map(([name,path])=>path==='/'?<Link className="nav selected" key={name} href={path}>{name}</Link>:<Link className="nav" key={name} href={path}>{name}</Link>)}<footer>Local workspace · v0.2</footer></aside><main><header><div><small>WORKSPACE / OVERVIEW</small><h1>Executive overview</h1><p>Retail data engineering workspace</p></div><Link className="primary" href="/airflow">Open Airflow control</Link></header>{error&&<div className="error">{error}</div>} {data&&<><section className="metrics">{[['Silver records',data.metrics.records],['Total revenue',money(data.metrics.revenue)],['Units sold',data.metrics.units],['Rejected rows',data.rejected.rows]].map(([label,value])=><article key={String(label)}><small>{String(label)}</small><h2>{value}</h2></article>)}</section><article><h3>Revenue by category</h3>{data.categories.map((c:any)=><div className="barrow" key={c.category}><span>{c.category}</span><div className="track"><div style={{width:`${Number(c.revenue)/Math.max(...data.categories.map((x:any)=>Number(x.revenue)))*100}%`}}/></div><strong>{money(c.revenue)}</strong></div>)}</article><article><h3>Recent pipeline executions</h3><table><thead><tr><th>Run</th><th>Accepted</th><th>Rejected</th></tr></thead><tbody>{data.runs.map((r:any)=><tr key={r.id}><td>#{r.id}</td><td>{r.accepted}</td><td>{r.rejected}</td></tr>)}</tbody></table></article></>}</main></div>
+}

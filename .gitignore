@@ -1,0 +1,69 @@
+# Operating system and editor files
+.DS_Store
+Thumbs.db
+Desktop.ini
+.vscode/*
+!.vscode/extensions.json
+
+# JavaScript / Next.js
+node_modules/
+.next/
+out/
+dist/
+*.tsbuildinfo
+npm-debug.log*
+yarn-debug.log*
+pnpm-debug.log*
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.Python
+.venv/
+venv/
+env/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.tox/
+.coverage
+.coverage.*
+htmlcov/
+*.egg-info/
+
+# Environment files and local secrets
+.env
+.env.*
+!.env.example
+!.env.template
+*.pem
+*.key
+*.p12
+*.pfx
+id_rsa
+id_ed25519
+secrets/
+.secrets/
+profiles.yml
+
+# Logs and runtime artifacts
+*.log
+logs/
+airflow/logs/
+.cache/
+tmp/
+temp/
+
+# Local database / Docker volume directories
+/pgdata/
+/airflowpgdata/
+/postgres-data/
+/airflow-data/
+/volumes/
+
+# Generated scale-test data and ETL outputs
+/data/sales_50000.csv
+/data/sales_50000.json
+/data/*.parquet
+/data/parquet/
