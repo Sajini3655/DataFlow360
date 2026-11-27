@@ -17,6 +17,8 @@ services:
     build:
       context: .
       dockerfile: backend/Dockerfile
+      args:
+        INSTALL_AZURE_SDK: "${INSTALL_AZURE_SDK:-false}"
     environment:
       DATABASE_URL: "postgresql://${POSTGRES_USER:?Set POSTGRES_USER in .env}:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}@db:5432/${POSTGRES_DB:?Set POSTGRES_DB in .env}"
       AIRFLOW_API_URL: http://airflow-webserver:8080
@@ -25,6 +27,19 @@ services:
       PIPELINE_INTERNAL_TOKEN: "${PIPELINE_INTERNAL_TOKEN:?Set PIPELINE_INTERNAL_TOKEN in .env}"
       PARQUET_DIR: /app/parquet
       SPARK_RUNNER_URL: http://spark-runner:8083
+      CLOUD_STORAGE_MODE: "${CLOUD_STORAGE_MODE:-local}"
+      CLOUD_LOCAL_ROOT: "${CLOUD_LOCAL_ROOT:-/app/data/cloud}"
+      AZURE_STORAGE_ACCOUNT_URL: "${AZURE_STORAGE_ACCOUNT_URL:-}"
+      AZURE_STORAGE_AUTH_MODE: "${AZURE_STORAGE_AUTH_MODE:-entra}"
+      AZURE_STORAGE_RETRY_TOTAL: "${AZURE_STORAGE_RETRY_TOTAL:-3}"
+      AZURE_STORAGE_BRONZE_CONTAINER: "${AZURE_STORAGE_BRONZE_CONTAINER:-dataflow-bronze}"
+      AZURE_STORAGE_SILVER_CONTAINER: "${AZURE_STORAGE_SILVER_CONTAINER:-dataflow-silver}"
+      AZURE_STORAGE_GOLD_CONTAINER: "${AZURE_STORAGE_GOLD_CONTAINER:-dataflow-gold}"
+      AZURE_TENANT_ID: "${AZURE_TENANT_ID:-}"
+      AZURE_CLIENT_ID: "${AZURE_CLIENT_ID:-}"
+      AZURE_CLIENT_SECRET: "${AZURE_CLIENT_SECRET:-}"
+      FABRIC_WORKSPACE_NAME: "${FABRIC_WORKSPACE_NAME:-}"
+      FABRIC_LAKEHOUSE_NAME: "${FABRIC_LAKEHOUSE_NAME:-}"
     ports: ['8000:8000']
     volumes:
       - ./data:/app/data

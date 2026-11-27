@@ -1,0 +1,24 @@
+{
+  "name": "ds_postgresql_source",
+  "properties": {
+    "linkedServiceName": {
+      "referenceName": "ls_postgresql_v2",
+      "type": "LinkedServiceReference",
+      "parameters": {
+        "server": "REPLACE_POSTGRES_SERVER",
+        "database": "REPLACE_DATABASE",
+        "username": "REPLACE_READONLY_USERNAME"
+      }
+    },
+    "parameters": {
+      "schemaName": { "type": "String" },
+      "tableName": { "type": "String" }
+    },
+    "type": "PostgreSqlV2Table",
+    "typeProperties": {
+      "schema": "@dataset().schemaName",
+      "table": "@dataset().tableName"
+    },
+    "schema": []
+  }
+}

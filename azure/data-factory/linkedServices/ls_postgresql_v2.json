@@ -1,0 +1,27 @@
+{
+  "name": "ls_postgresql_v2",
+  "properties": {
+    "parameters": {
+      "server": { "type": "String" },
+      "database": { "type": "String" },
+      "username": { "type": "String" }
+    },
+    "type": "PostgreSqlV2",
+    "typeProperties": {
+      "server": "@{linkedService().server}",
+      "port": 5432,
+      "database": "@{linkedService().database}",
+      "authenticationType": "Basic",
+      "username": "@{linkedService().username}",
+      "password": {
+        "type": "AzureKeyVaultSecret",
+        "store": {
+          "referenceName": "ls_key_vault",
+          "type": "LinkedServiceReference"
+        },
+        "secretName": "dataflow-postgresql-password"
+      },
+      "sslMode": "Require"
+    }
+  }
+}

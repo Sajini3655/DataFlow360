@@ -1,0 +1,25 @@
+{
+  "name": "ds_adls_parquet_sink",
+  "properties": {
+    "linkedServiceName": {
+      "referenceName": "ls_adls_gen2",
+      "type": "LinkedServiceReference"
+    },
+    "parameters": {
+      "fileSystem": { "type": "String" },
+      "folderPath": { "type": "String" },
+      "fileName": { "type": "String" }
+    },
+    "type": "Parquet",
+    "typeProperties": {
+      "location": {
+        "type": "AzureBlobFSLocation",
+        "fileSystem": "@dataset().fileSystem",
+        "folderPath": "@dataset().folderPath",
+        "fileName": "@dataset().fileName"
+      },
+      "compressionCodec": "snappy"
+    },
+    "schema": []
+  }
+}

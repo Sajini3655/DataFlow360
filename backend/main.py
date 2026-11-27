@@ -3,7 +3,11 @@ import json
 import hashlib
 import csv
 import io
+import importlib.util
 import time
+import tempfile
+import shutil
+import logging
 from pathlib import Path
 from datetime import date
 from typing import Any
@@ -15,8 +19,9 @@ import pyarrow.parquet as parquet_reader
 from psycopg.rows import dict_row
 from fastapi import Body, FastAPI, Header, HTTPException, Query, status
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import StreamingResponse
+from fastapi.responses import FileResponse, StreamingResponse
 from pydantic import BaseModel, Field
+from starlette.background import BackgroundTask
 
 from pipeline import transform_records
 from adapters import csv_adapter, json_adapter, rest_adapter
@@ -30,9 +35,16 @@ from data_quality import (
 )
 from medallion import parquet_layer_status, write_parquet_files
 from warehouse_loader import load_silver_rows
+from cloud_storage import (
+    CloudStorageConfigurationError,
+    CloudStorageError,
+    CloudStorageConfig,
+    create_storage_adapter,
+)
 
 ROOT = Path(__file__).resolve().parent.parent
 SOURCE = ROOT / "data" / "sales_50000.csv"
+LOGGER = logging.getLogger(__name__)
 
 
 class QualityRuleUpdate(BaseModel):
@@ -95,6 +107,269 @@ ensure_schema()
 @app.get("/health")
 def health():
     return {"status": "ok"}
+
+
+def _record_cloud_event(
+    operation: str,
+    storage_mode: str,
+    state: str,
+    *,
+    layer: str | None = None,
+    object_name: str | None = None,
+    bytes_transferred: int = 0,
+    message: str | None = None,
+    details: dict[str, Any] | None = None,
+):
+    with connect() as conn:
+        with conn.cursor() as cursor:
+            cursor.execute(
+                "INSERT INTO cloud_operation_events "
+                "(operation,storage_mode,state,layer,object_name,bytes_transferred,"
+                "message,details) VALUES (%s,%s,%s,%s,%s,%s,%s,%s::jsonb)",
+                (
+                    operation,
+                    storage_mode,
+                    state,
+                    layer,
+                    object_name,
+                    bytes_transferred,
+                    message,
+                    json.dumps(details or {}),
+                ),
+            )
+
+
+def _azure_sdk_available() -> bool:
+    try:
+        return all(
+            importlib.util.find_spec(module) is not None
+            for module in (
+                "azure.identity",
+                "azure.storage.filedatalake",
+                "azure.core.pipeline.policies",
+            )
+        )
+    except (ImportError, ModuleNotFoundError, ValueError):
+        return False
+
+
+@app.get("/cloud/status")
+def cloud_status():
+    config_error = None
+    try:
+        config = CloudStorageConfig.from_env()
+    except CloudStorageConfigurationError as exc:
+        config = None
+        config_error = str(exc)
+    mode = config.mode if config else os.getenv("CLOUD_STORAGE_MODE", "local").strip().lower()
+    with connect() as conn:
+        with conn.cursor() as cursor:
+            cursor.execute(
+                "SELECT DISTINCT ON (operation) event_id,operation,storage_mode,state,"
+                "layer,object_name,bytes_transferred,message,started_at,finished_at "
+                "FROM cloud_operation_events ORDER BY operation,started_at DESC,event_id DESC"
+            )
+            latest_events = cursor.fetchall()
+    latest = {item["operation"]: item for item in latest_events}
+    account_host = None
+    if config and config.account_url:
+        account_host = config.account_url.split("://", 1)[-1].split("/", 1)[0]
+    source_dir = Path(os.getenv("PARQUET_DIR", str(ROOT / "data" / "parquet")))
+    source_datasets = parquet_layer_status(source_dir) if source_dir.is_dir() else []
+    connection_event = latest.get("connection_test")
+    sync_event = latest.get("dataset_sync")
+    if connection_event and connection_event["storage_mode"] != mode:
+        connection_event = None
+    if sync_event and sync_event["storage_mode"] != mode:
+        sync_event = None
+    storage_configured = config_error is None and (
+        mode == "local" or bool(config and config.account_url)
+    )
+    fabric_workspace = os.getenv("FABRIC_WORKSPACE_NAME", "").strip() or None
+    fabric_lakehouse = os.getenv("FABRIC_LAKEHOUSE_NAME", "").strip() or None
+    fabric_configured = bool(fabric_workspace and fabric_lakehouse)
+    return {
+        "execution_modes": [
+            {"mode": "local", "available": True},
+            {
+                "mode": "azure",
+                "available": bool(config and config.mode == "azure" and _azure_sdk_available()),
+            },
+        ],
+        "storage": {
+            "mode": mode,
+            "configured": storage_configured,
+            "account_host": account_host,
+            "authentication": config.auth_mode if config else "entra",
+            "sdk_available": _azure_sdk_available() if mode == "azure" else None,
+            "containers": config.containers if config else {},
+            "configuration_error": config_error,
+            "connection": (
+                {
+                    "state": "not_tested",
+                    "message": "No storage connection test has been recorded",
+                }
+                if connection_event is None
+                else {
+                    "state": connection_event["state"],
+                    "message": connection_event["message"],
+                    "tested_at": connection_event["finished_at"],
+                }
+            ),
+            "last_sync": sync_event,
+            "local_datasets": source_datasets,
+        },
+        "fabric": {
+            "configured": fabric_configured,
+            "state": "configured_unverified" if fabric_configured else "not_configured",
+            "workspace": fabric_workspace,
+            "lakehouse": fabric_lakehouse,
+            "execution": "not_run",
+            "message": (
+                "Workspace settings are present, but Fabric execution is not connected or verified"
+                if fabric_configured
+                else "Set FABRIC_WORKSPACE_NAME and FABRIC_LAKEHOUSE_NAME after creating a Fabric workspace and Lakehouse"
+            ),
+        },
+    }
+
+
+@app.get("/cloud/history")
+def cloud_history(limit: int = Query(default=50, ge=1, le=100)):
+    with connect() as conn:
+        with conn.cursor() as cursor:
+            cursor.execute(
+                "SELECT event_id,operation,storage_mode,state,layer,object_name,"
+                "bytes_transferred,message,details,started_at,finished_at "
+                "FROM cloud_operation_events ORDER BY started_at DESC,event_id DESC LIMIT %s",
+                (limit,),
+            )
+            return {"events": cursor.fetchall()}
+
+
+@app.post("/cloud/storage/test")
+def cloud_storage_test():
+    mode = os.getenv("CLOUD_STORAGE_MODE", "local").strip().lower()
+    try:
+        adapter = create_storage_adapter()
+        result = adapter.test_connection()
+    except CloudStorageConfigurationError as exc:
+        _record_cloud_event(
+            "connection_test", mode, "failed", message=str(exc), details={"error_type": type(exc).__name__}
+        )
+        return {"success": False, "mode": mode, "message": str(exc)}
+    except CloudStorageError as exc:
+        _record_cloud_event(
+            "connection_test", mode, "failed", message=str(exc), details={"retryable": exc.retryable}
+        )
+        return {"success": False, "mode": mode, "message": str(exc)}
+    _record_cloud_event(
+        "connection_test",
+        adapter.mode,
+        "succeeded",
+        message=result["message"],
+        details={"containers": result["containers"]},
+    )
+    return result
+
+
+@app.post("/cloud/sync")
+def cloud_sync():
+    mode = os.getenv("CLOUD_STORAGE_MODE", "local").strip().lower()
+    try:
+        adapter = create_storage_adapter()
+        config = CloudStorageConfig.from_env()
+        source_root = Path(os.getenv("PARQUET_DIR", str(ROOT / "data" / "parquet")))
+        results = []
+        for layer in ("bronze", "silver", "gold"):
+            source = source_root / f"{layer}_sales.parquet"
+            if not source.is_file():
+                raise CloudStorageError(f"Local {layer} Parquet snapshot is unavailable")
+            result = adapter.upload_file(source, layer, source.name)
+            _record_cloud_event(
+                "dataset_sync_file",
+                adapter.mode,
+                result["status"],
+                layer=layer,
+                object_name=result["name"],
+                bytes_transferred=result["bytes"] if result["status"] == "uploaded" else 0,
+                message=f"{result['status']} {layer} dataset",
+                details={"etag": result.get("etag"), "container": config.containers[layer]},
+            )
+            results.append(result)
+        _record_cloud_event(
+            "dataset_sync",
+            adapter.mode,
+            "succeeded",
+            message=f"Synchronized {len(results)} medallion datasets",
+            details={
+                "files": results,
+                "containers": config.containers,
+            },
+        )
+    except CloudStorageConfigurationError as exc:
+        _record_cloud_event(
+            "dataset_sync",
+            mode,
+            "failed",
+            message=str(exc),
+            details={"error_type": type(exc).__name__},
+        )
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    except CloudStorageError as exc:
+        _record_cloud_event(
+            "dataset_sync",
+            mode,
+            "failed",
+            message=str(exc),
+            details={"retryable": exc.retryable},
+        )
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+    return {
+        "success": True,
+        "mode": adapter.mode,
+        "message": (
+            "Files synchronized to the configured ADLS Gen2 file systems"
+            if adapter.mode == "azure"
+            else "Files synchronized to the local storage adapter; no cloud service was contacted"
+        ),
+        "files": results,
+    }
+
+
+@app.get("/cloud/storage/files/{layer}")
+def cloud_storage_files(layer: str):
+    try:
+        adapter = create_storage_adapter()
+        files = adapter.list_files(layer)
+    except CloudStorageConfigurationError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    except CloudStorageError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+    return {"mode": adapter.mode, "layer": layer, "files": files}
+
+
+@app.get("/cloud/storage/files/{layer}/{object_name:path}")
+def cloud_storage_download(layer: str, object_name: str):
+    temporary_dir = None
+    try:
+        adapter = create_storage_adapter()
+        temporary_dir = Path(tempfile.mkdtemp(prefix="dataflow360-cloud-download-"))
+        target = temporary_dir / Path(object_name).name
+        result = adapter.download_file(layer, object_name, target)
+    except CloudStorageConfigurationError as exc:
+        if temporary_dir:
+            shutil.rmtree(temporary_dir, ignore_errors=True)
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    except CloudStorageError as exc:
+        if temporary_dir:
+            shutil.rmtree(temporary_dir, ignore_errors=True)
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    return FileResponse(
+        target,
+        filename=Path(result["name"]).name,
+        background=BackgroundTask(shutil.rmtree, temporary_dir, ignore_errors=True),
+    )
 
 
 def _spark_output_rows(airflow_run_id):

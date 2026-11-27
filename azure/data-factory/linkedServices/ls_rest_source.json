@@ -1,0 +1,11 @@
+{
+  "name": "ls_rest_source",
+  "properties": {
+    "type": "RestService",
+    "typeProperties": {
+      "url": "https://REPLACE_REST_API_BASE_URL/",
+      "enableServerCertificateValidation": true,
+      "authenticationType": "Anonymous"
+    }
+  }
+}

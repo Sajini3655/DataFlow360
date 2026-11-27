@@ -2,7 +2,7 @@
 import {useEffect,useState} from 'react';
 import Link from 'next/link';
 const API=process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
-const pages=[['Overview','/'],['Sources','/sources'],['Data Quality','/quality'],['Medallion','/medallion'],['Star Schema','/star-schema'],['Analytics','/analytics'],['Inventory','/inventory'],['Processing','/processing'],['Airflow','/airflow']];
+const pages=[['Overview','/'],['Sources','/sources'],['Data Quality','/quality'],['Medallion','/medallion'],['Star Schema','/star-schema'],['Analytics','/analytics'],['Inventory','/inventory'],['Processing','/processing'],['Airflow','/airflow'],['Cloud Integration','/cloud']];
 export default function Page(){
  const [data,setData]=useState<any>(null),[error,setError]=useState('');
  useEffect(()=>{fetch(`${API}/overview`).then(r=>r.ok?r.json():Promise.reject()).then(setData).catch(()=>setError('Unable to load backend data'))},[]);

@@ -67,6 +67,7 @@ temp/
 /data/sales_50000.json
 /data/*.parquet
 /data/parquet/
+/data/cloud/
 
 # dbt-generated artifacts and packages
 /dbt/target/

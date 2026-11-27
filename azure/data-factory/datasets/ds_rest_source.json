@@ -1,0 +1,17 @@
+{
+  "name": "ds_rest_source",
+  "properties": {
+    "linkedServiceName": {
+      "referenceName": "ls_rest_source",
+      "type": "LinkedServiceReference"
+    },
+    "parameters": {
+      "relativeUrl": { "type": "String" }
+    },
+    "type": "RestResource",
+    "typeProperties": {
+      "relativeUrl": "@dataset().relativeUrl"
+    },
+    "schema": []
+  }
+}

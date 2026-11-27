@@ -1,0 +1,240 @@
+{
+  "name": "PL_DataFlow360_Ingest",
+  "properties": {
+    "description": "Parameterized CSV, JSON, REST, or PostgreSQL ingestion into the ADLS Gen2 Bronze file system.",
+    "parameters": {
+      "sourceType": { "type": "String", "defaultValue": "csv" },
+      "sourceFileSystem": { "type": "String", "defaultValue": "dataflow-landing" },
+      "sourceFolder": { "type": "String", "defaultValue": "sales" },
+      "sourceFile": { "type": "String", "defaultValue": "sales.csv" },
+      "restRelativeUrl": { "type": "String", "defaultValue": "sales" },
+      "schemaName": { "type": "String", "defaultValue": "public" },
+      "tableName": { "type": "String", "defaultValue": "sales" },
+      "watermarkColumn": { "type": "String", "defaultValue": "updated_at" },
+      "watermarkValue": { "type": "String", "defaultValue": "1970-01-01T00:00:00Z" },
+      "targetFileSystem": { "type": "String", "defaultValue": "dataflow-bronze" },
+      "targetFolder": { "type": "String", "defaultValue": "sales" },
+      "targetFile": { "type": "String", "defaultValue": "sales.parquet" }
+    },
+    "activities": [
+      {
+        "name": "IfCsv",
+        "type": "IfCondition",
+        "typeProperties": {
+          "expression": { "value": "@equals(toLower(pipeline().parameters.sourceType), 'csv')", "type": "Expression" },
+          "ifTrueActivities": [
+            {
+              "name": "CopyCsvToBronze",
+              "type": "Copy",
+              "policy": { "timeout": "01:00:00", "retry": 3, "retryIntervalInSeconds": 30, "secureOutput": false, "secureInput": false },
+              "typeProperties": {
+                "source": { "type": "DelimitedTextSource", "storeSettings": { "type": "AzureBlobFSReadSettings", "recursive": false } },
+                "sink": { "type": "ParquetSink", "storeSettings": { "type": "AzureBlobFSWriteSettings" }, "formatSettings": { "type": "ParquetWriteSettings" } }
+              },
+              "inputs": [
+                {
+                  "referenceName": "ds_csv_source",
+                  "type": "DatasetReference",
+                  "parameters": {
+                    "fileSystem": { "value": "@pipeline().parameters.sourceFileSystem", "type": "Expression" },
+                    "folderPath": { "value": "@pipeline().parameters.sourceFolder", "type": "Expression" },
+                    "fileName": { "value": "@pipeline().parameters.sourceFile", "type": "Expression" }
+                  }
+                }
+              ],
+              "outputs": [
+                {
+                  "referenceName": "ds_adls_parquet_sink",
+                  "type": "DatasetReference",
+                  "parameters": {
+                    "fileSystem": { "value": "@pipeline().parameters.targetFileSystem", "type": "Expression" },
+                    "folderPath": { "value": "@pipeline().parameters.targetFolder", "type": "Expression" },
+                    "fileName": { "value": "@pipeline().parameters.targetFile", "type": "Expression" }
+                  }
+                }
+              ]
+            },
+            {
+              "name": "FailCsv",
+              "type": "Fail",
+              "dependsOn": [{ "activity": "CopyCsvToBronze", "dependencyConditions": ["Failed"] }],
+              "typeProperties": { "errorCode": "CSV_COPY_FAILED", "message": "CSV copy failed; inspect this pipeline run in ADF Monitor." }
+            }
+          ],
+          "ifFalseActivities": []
+        }
+      },
+      {
+        "name": "IfJson",
+        "type": "IfCondition",
+        "typeProperties": {
+          "expression": { "value": "@equals(toLower(pipeline().parameters.sourceType), 'json')", "type": "Expression" },
+          "ifTrueActivities": [
+            {
+              "name": "CopyJsonToBronze",
+              "type": "Copy",
+              "policy": { "timeout": "01:00:00", "retry": 3, "retryIntervalInSeconds": 30, "secureOutput": false, "secureInput": false },
+              "typeProperties": {
+                "source": {
+                  "type": "JsonSource",
+                  "storeSettings": { "type": "AzureBlobFSReadSettings", "recursive": false },
+                  "formatSettings": { "type": "JsonReadSettings", "filePattern": "arrayOfObjects" }
+                },
+                "sink": { "type": "ParquetSink", "storeSettings": { "type": "AzureBlobFSWriteSettings" }, "formatSettings": { "type": "ParquetWriteSettings" } }
+              },
+              "inputs": [
+                {
+                  "referenceName": "ds_json_source",
+                  "type": "DatasetReference",
+                  "parameters": {
+                    "fileSystem": { "value": "@pipeline().parameters.sourceFileSystem", "type": "Expression" },
+                    "folderPath": { "value": "@pipeline().parameters.sourceFolder", "type": "Expression" },
+                    "fileName": { "value": "@pipeline().parameters.sourceFile", "type": "Expression" }
+                  }
+                }
+              ],
+              "outputs": [
+                {
+                  "referenceName": "ds_adls_parquet_sink",
+                  "type": "DatasetReference",
+                  "parameters": {
+                    "fileSystem": { "value": "@pipeline().parameters.targetFileSystem", "type": "Expression" },
+                    "folderPath": { "value": "@pipeline().parameters.targetFolder", "type": "Expression" },
+                    "fileName": { "value": "@pipeline().parameters.targetFile", "type": "Expression" }
+                  }
+                }
+              ]
+            },
+            {
+              "name": "FailJson",
+              "type": "Fail",
+              "dependsOn": [{ "activity": "CopyJsonToBronze", "dependencyConditions": ["Failed"] }],
+              "typeProperties": { "errorCode": "JSON_COPY_FAILED", "message": "JSON copy failed; inspect this pipeline run in ADF Monitor." }
+            }
+          ],
+          "ifFalseActivities": []
+        }
+      },
+      {
+        "name": "IfRest",
+        "type": "IfCondition",
+        "typeProperties": {
+          "expression": { "value": "@equals(toLower(pipeline().parameters.sourceType), 'rest')", "type": "Expression" },
+          "ifTrueActivities": [
+            {
+              "name": "CopyRestToBronze",
+              "type": "Copy",
+              "policy": { "timeout": "01:00:00", "retry": 3, "retryIntervalInSeconds": 30, "secureOutput": false, "secureInput": false },
+              "typeProperties": {
+                "source": { "type": "RestSource", "requestMethod": "GET" },
+                "sink": { "type": "ParquetSink", "storeSettings": { "type": "AzureBlobFSWriteSettings" }, "formatSettings": { "type": "ParquetWriteSettings" } }
+              },
+              "inputs": [
+                {
+                  "referenceName": "ds_rest_source",
+                  "type": "DatasetReference",
+                  "parameters": { "relativeUrl": { "value": "@pipeline().parameters.restRelativeUrl", "type": "Expression" } }
+                }
+              ],
+              "outputs": [
+                {
+                  "referenceName": "ds_adls_parquet_sink",
+                  "type": "DatasetReference",
+                  "parameters": {
+                    "fileSystem": { "value": "@pipeline().parameters.targetFileSystem", "type": "Expression" },
+                    "folderPath": { "value": "@pipeline().parameters.targetFolder", "type": "Expression" },
+                    "fileName": { "value": "@pipeline().parameters.targetFile", "type": "Expression" }
+                  }
+                }
+              ]
+            },
+            {
+              "name": "FailRest",
+              "type": "Fail",
+              "dependsOn": [{ "activity": "CopyRestToBronze", "dependencyConditions": ["Failed"] }],
+              "typeProperties": { "errorCode": "REST_COPY_FAILED", "message": "REST copy failed; inspect this pipeline run in ADF Monitor." }
+            }
+          ],
+          "ifFalseActivities": []
+        }
+      },
+      {
+        "name": "IfPostgresql",
+        "type": "IfCondition",
+        "typeProperties": {
+          "expression": { "value": "@equals(toLower(pipeline().parameters.sourceType), 'postgres')", "type": "Expression" },
+          "ifTrueActivities": [
+            {
+              "name": "CopyPostgresqlToBronze",
+              "type": "Copy",
+              "policy": { "timeout": "01:00:00", "retry": 3, "retryIntervalInSeconds": 30, "secureOutput": false, "secureInput": false },
+              "typeProperties": {
+                "source": {
+                  "type": "PostgreSqlV2Source",
+                  "query": {
+                    "value": "@concat('SELECT * FROM ', pipeline().parameters.schemaName, '.', pipeline().parameters.tableName, ' WHERE ', pipeline().parameters.watermarkColumn, ' >= ''', pipeline().parameters.watermarkValue, '''')",
+                    "type": "Expression"
+                  }
+                },
+                "sink": { "type": "ParquetSink", "storeSettings": { "type": "AzureBlobFSWriteSettings" }, "formatSettings": { "type": "ParquetWriteSettings" } }
+              },
+              "inputs": [
+                {
+                  "referenceName": "ds_postgresql_source",
+                  "type": "DatasetReference",
+                  "parameters": {
+                    "schemaName": { "value": "@pipeline().parameters.schemaName", "type": "Expression" },
+                    "tableName": { "value": "@pipeline().parameters.tableName", "type": "Expression" }
+                  }
+                }
+              ],
+              "outputs": [
+                {
+                  "referenceName": "ds_adls_parquet_sink",
+                  "type": "DatasetReference",
+                  "parameters": {
+                    "fileSystem": { "value": "@pipeline().parameters.targetFileSystem", "type": "Expression" },
+                    "folderPath": { "value": "@pipeline().parameters.targetFolder", "type": "Expression" },
+                    "fileName": { "value": "@pipeline().parameters.targetFile", "type": "Expression" }
+                  }
+                }
+              ]
+            },
+            {
+              "name": "FailPostgresql",
+              "type": "Fail",
+              "dependsOn": [{ "activity": "CopyPostgresqlToBronze", "dependencyConditions": ["Failed"] }],
+              "typeProperties": { "errorCode": "POSTGRES_COPY_FAILED", "message": "PostgreSQL copy failed; inspect this pipeline run in ADF Monitor." }
+            }
+          ],
+          "ifFalseActivities": []
+        }
+      },
+      {
+        "name": "IfUnsupportedSource",
+        "type": "IfCondition",
+        "dependsOn": [
+          { "activity": "IfCsv", "dependencyConditions": ["Succeeded"] },
+          { "activity": "IfJson", "dependencyConditions": ["Succeeded"] },
+          { "activity": "IfRest", "dependencyConditions": ["Succeeded"] },
+          { "activity": "IfPostgresql", "dependencyConditions": ["Succeeded"] }
+        ],
+        "typeProperties": {
+          "expression": {
+            "value": "@not(or(equals(toLower(pipeline().parameters.sourceType), 'csv'), or(equals(toLower(pipeline().parameters.sourceType), 'json'), or(equals(toLower(pipeline().parameters.sourceType), 'rest'), equals(toLower(pipeline().parameters.sourceType), 'postgres')))))",
+            "type": "Expression"
+          },
+          "ifTrueActivities": [
+            {
+              "name": "FailUnsupportedSourceType",
+              "type": "Fail",
+              "typeProperties": { "errorCode": "UNSUPPORTED_SOURCE_TYPE", "message": "sourceType must be csv, json, rest, or postgres." }
+            }
+          ],
+          "ifFalseActivities": []
+        }
+      }
+    ],
+    "annotations": ["DataFlow360", "Bronze"]
+  }
+}

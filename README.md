@@ -1,4 +1,4 @@
-# DataFlow360 v0.3
+# DataFlow360 v0.4 cloud integration preparation
 
 > An end-to-end enterprise data engineering platform featuring automated ETL
 > pipelines, Apache Airflow orchestration, medallion architecture, PostgreSQL
@@ -6,9 +6,12 @@
 
 Local retail data platform with a Next.js dashboard, FastAPI API, PostgreSQL
 warehouse, Airflow orchestration, optional dbt and PySpark services, synthetic
-transaction generator, quality monitoring, and Parquet persistence. The sample
-dataset is synthetic. Compose uses development-only credentials and is not
-production hardened.
+transaction generator, quality monitoring, and Parquet persistence. This
+branch adds opt-in Azure Data Lake Storage Gen2 support, deployable Azure Data
+Factory templates, and a Microsoft Fabric Lakehouse notebook. Cloud services
+are optional; no Azure or Fabric account was connected or provisioned for
+these changes. The sample dataset is synthetic. Compose uses development-only
+credentials and is not production hardened.
 
 Screenshots are not included yet.
 
@@ -18,6 +21,11 @@ Screenshots are not included yet.
 flowchart LR
     Sources[CSV / JSON / REST / PostgreSQL] --> Worker[FastAPI ETL worker and adapters]
     UI[Next.js dashboard] --> API[FastAPI]
+    API -->|StorageAdapter| ADLS[Optional ADLS Gen2]
+    API -->|local default| Local[Ignored local cloud-data directory]
+    ADF[Optional Azure Data Factory] --> ADLS
+    Fabric[Fabric Data Factory] --> Notebook[Fabric PySpark notebook]
+    Notebook --> OneLake[OneLake Lakehouse Delta tables]
     API -->|submit run and read status| Airflow
     Airflow[Apache Airflow DAG] -->|authenticated execute request| Worker
     Airflow -->|optional dbt build| DBT[dbt analytics models]
@@ -127,13 +135,54 @@ sample API; PostgreSQL reads Silver. Parquet outputs are
 - `GET /processing`, `GET /lineage`
 - `GET /pipeline/runs/{dag_run_id}` (actual Airflow run/task states)
 - `POST /pipeline/execute` (internal token required; called by Airflow only)
+- `GET /cloud/status`, `GET /cloud/history`
+- `POST /cloud/storage/test`, `POST /cloud/sync`
+- `GET /cloud/storage/files/{layer}` and
+  `GET /cloud/storage/files/{layer}/{object_name}` (configured storage adapter)
 
-The dashboard has nine pages: Overview, Sources, Data Quality, Medallion,
-Star Schema, Analytics, Inventory, Processing, and Airflow. Analytics filters
+The dashboard has ten pages: Overview, Sources, Data Quality, Medallion,
+Star Schema, Analytics, Inventory, Processing, Airflow, and Cloud Integration.
+Analytics filters
 are sent to the backend rather than computed from browser-side demo values.
 The Processing page reads engine availability and persisted execution metrics
 from the backend and can submit real Airflow requests for Pandas, optional
 PySpark, and an equivalence benchmark.
+
+The Cloud Integration page shows actual backend storage status, connection
+results, sync history, and stored file listings. Fabric labels are
+configuration-only and always remain unverified until run in a real workspace.
+
+## Optional Azure and Microsoft Fabric
+
+- The `StorageAdapter` defaults to local storage under ignored `data/cloud/`.
+  Azure mode uses the Azure Python SDK and Microsoft Entra
+  `DefaultAzureCredential`; no account key or SAS credential is supported.
+- The backend reports actual configuration, test, sync, listing, and operation
+  history responses. Cloud connection results are not faked. Sync copies the
+  existing three Parquet snapshots to pre-created Bronze/Silver/Gold ADLS file
+  systems; it does not create resources or run automatically.
+- `azure/data-factory/` contains parameterized native ADF templates for CSV,
+  JSON, REST, and PostgreSQL ingestion, plus PostgreSQL watermark SQL and a
+  stopped schedule trigger. Deploy only to an existing factory after filling
+  non-secret endpoint values and configuring identity permissions.
+- `azure/fabric/dataflow360_medallion.ipynb` demonstrates OneLake Lakehouse
+  Delta Bronze/Silver/Gold processing, data-quality quarantine, MERGE-based
+  incremental updates, and business aggregates. It must be imported and run in
+  a real Fabric workspace; local Spark is not a substitute.
+- Azure and Fabric setup, identity/permission guidance, deployment instructions,
+  architecture, costs, cleanup, and limitations are documented in
+  [Azure setup](docs/azure-guide.md),
+  [ADF templates](docs/azure-data-factory.md),
+  [Fabric setup](docs/fabric-guide.md),
+  [cloud architecture](docs/cloud-architecture.md), and
+  [cloud cost management](docs/cloud-cost-management.md).
+
+Azure configuration variables are listed in `.env.example`. The default
+`CLOUD_STORAGE_MODE=local` preserves local behavior. Install optional SDK
+dependencies with `python -m pip install -r backend/requirements-azure.txt`;
+for Docker builds set `INSTALL_AZURE_SDK=true` before building the backend.
+Credentials belong only in the ignored `.env` or a managed identity—not in
+source files.
 
 ## Optional dbt and Spark
 
@@ -170,10 +219,10 @@ docker compose exec db psql -U dataflow -d dataflow -c "select count(*) from sil
 
 ## Verification status and known limitations
 
-- Local verification completed: the backend suite passed **21 tests**,
+- Previously verified v0.3 local results: the backend suite passed **21 tests**,
   including the PostgreSQL Gold upsert integration test; the frontend
   production build/type check passed; Docker Compose validation passed; and all
-  nine dashboard routes returned HTTP 200.
+  nine pre-cloud dashboard routes returned HTTP 200.
 - dbt 1.8.8 / adapter 1.8.2: `dbt debug` passed, `dbt build` passed **41/41**,
   `dbt test` passed **19/19**, and docs generation succeeded. Incremental
   insert/update and idempotency checks passed. These commands were run
@@ -198,9 +247,35 @@ docker compose exec db psql -U dataflow -d dataflow -c "select count(*) from sil
 - Parquet snapshots are full-table rewrites after each successful ETL run and
   can become expensive as data grows. CSV/JSON are local-file adapters; the
   REST and PostgreSQL adapters target local demonstration services.
+- Phase 12 cloud source changes are not represented in the v0.3 verification
+  numbers above. Azure adapter unit tests use mocked Azure clients; no real
+  subscription, ADLS account, Data Factory, or Fabric workspace was connected.
+  Migration `005_cloud_integration.sql` was applied to the existing PostgreSQL
+  database and its table/indexes were verified. The focused backend-container
+  cloud suite passed **12/12 tests**. Local API checks confirmed status,
+  history, connection testing, synchronization, and Fabric/Azure unavailable
+  states. The first Parquet copy exceeded the client's short request timeout
+  but completed successfully in the backend; the follow-up synchronization
+  returned `skipped` for all three unchanged files, whose SHA-256 hashes
+  matched their source snapshots.
+- TypeScript `tsc --noEmit`, Docker Compose configuration validation, all 12
+  ADF JSON resource parses, and Fabric notebook JSON/Python syntax checks
+  passed. The Cloud Integration page was served with HTTP 200 and browser
+  inspection confirmed backend-derived local status, three dataset sizes,
+  stored object listing, operation history, Azure unavailable, and Fabric
+  not-configured/unrun status. The production build compiled and passed its
+  type-check stage but timed out after 300 seconds during Next.js page-data
+  collection; a complete production build is therefore **not verified**.
+  The frontend server was restarted and `/cloud` returned HTTP 200.
+- The `/cloud/sync` endpoint only synchronizes the current Parquet layer
+  snapshots. ADF templates require an existing configured factory, network
+  access, Key Vault secrets, pre-created storage file systems, and database
+  grants. The Fabric notebook requires a real Fabric Lakehouse; its execution
+  remains unverified.
 - The Airflow DAG has one ETL task and an optional downstream dbt task; it does
   not expose each ETL stage as a separate Airflow task. Backend stage-level
   execution metadata does not replace that DAG decomposition.
 - `.env.example` contains placeholders. Keep local secrets in the ignored
   `.env`, never commit it, and use a secrets manager outside local development.
-  Cloud deployment and BI integrations are not part of this implementation.
+  Cloud resources were not deployed; Power BI and other BI integrations are
+  not part of this implementation.

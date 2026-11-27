@@ -1,0 +1,32 @@
+{
+  "name": "TR_DataFlow360_HourlyPostgres",
+  "properties": {
+    "annotations": ["DataFlow360", "Hourly"],
+    "runtimeState": "Stopped",
+    "pipelines": [
+      {
+        "pipelineReference": {
+          "referenceName": "PL_DataFlow360_PostgresIncremental",
+          "type": "PipelineReference"
+        },
+        "parameters": {
+          "pipelineName": "DataFlow360-sales",
+          "schemaName": "public",
+          "tableName": "sales",
+          "watermarkColumn": "updated_at",
+          "targetFileSystem": "dataflow-bronze",
+          "targetFolder": "sales/incremental"
+        }
+      }
+    ],
+    "type": "ScheduleTrigger",
+    "typeProperties": {
+      "recurrence": {
+        "frequency": "Hour",
+        "interval": 1,
+        "startTime": "2027-01-01T00:00:00Z",
+        "timeZone": "UTC"
+      }
+    }
+  }
+}
