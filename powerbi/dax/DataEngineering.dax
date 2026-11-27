@@ -1,0 +1,46 @@
+Pipeline Success Rate =
+DIVIDE(
+    CALCULATE(COUNTROWS('Fact Pipeline Execution'), 'Fact Pipeline Execution'[state] = "succeeded"),
+    COUNTROWS('Fact Pipeline Execution')
+)
+
+Average Pipeline Duration Seconds =
+AVERAGE('Fact Pipeline Execution'[duration_seconds])
+
+Total Processed Records = SUM('Fact Pipeline Execution'[rows_read])
+
+Accepted Records = SUM('Fact Pipeline Execution'[accepted_rows])
+
+Rejected Records = SUM('Fact Pipeline Execution'[rejected_rows])
+
+Data Acceptance Rate =
+DIVIDE([Accepted Records], [Accepted Records] + [Rejected Records])
+
+Data Quality Score =
+AVERAGE('Fact Quality Run'[overall_score])
+
+Processing Throughput =
+DIVIDE(
+    SUM('Fact Processing Execution'[input_rows]),
+    SUM('Fact Processing Execution'[duration_seconds])
+)
+
+Pandas Benchmark Seconds =
+CALCULATE(
+    AVERAGE('Fact Processing Execution'[duration_seconds]),
+    FILTER(
+        'Fact Processing Execution',
+        'Fact Processing Execution'[engine] = "pandas"
+            && NOT ISBLANK('Fact Processing Execution'[benchmark_id])
+    )
+)
+
+PySpark Benchmark Seconds =
+CALCULATE(
+    AVERAGE('Fact Processing Execution'[duration_seconds]),
+    FILTER(
+        'Fact Processing Execution',
+        'Fact Processing Execution'[engine] = "pyspark"
+            && NOT ISBLANK('Fact Processing Execution'[benchmark_id])
+    )
+)

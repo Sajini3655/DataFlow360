@@ -1,0 +1,12 @@
+-- Format revenue measures as currency; quantity and order counts as whole numbers.
+Total Revenue = SUM('Fact Sales'[revenue])
+
+Total Quantity Sold = SUM('Fact Sales'[quantity])
+
+Total Orders = DISTINCTCOUNT('Fact Sales'[order_id])
+
+Average Order Value = DIVIDE([Total Revenue], [Total Orders])
+
+Total Customers = DISTINCTCOUNT('Fact Sales'[customer_key])
+
+Average Revenue per Customer = DIVIDE([Total Revenue], [Total Customers])

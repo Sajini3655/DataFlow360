@@ -1,0 +1,35 @@
+Product Revenue = [Total Revenue]
+
+Category Revenue =
+CALCULATE(
+    [Total Revenue],
+    ALLEXCEPT('Dim Product', 'Dim Product'[category_name])
+)
+
+Product Revenue Ranking =
+RANKX(
+    ALLSELECTED('Dim Product'[product_key]),
+    [Product Revenue],
+    ,
+    DESC,
+    DENSE
+)
+
+Top Performing Products = IF([Product Revenue Ranking] <= 10, 1, 0)
+
+Inventory Turnover =
+VAR AverageUnitStock =
+    AVERAGEX(
+        'Fact Inventory',
+        DIVIDE('Fact Inventory'[opening_stock] + 'Fact Inventory'[closing_stock], 2)
+    )
+RETURN
+    DIVIDE(SUM('Fact Inventory'[quantity_sold]), AverageUnitStock)
+
+Low Stock Product Count =
+COUNTROWS(
+    FILTER(
+        VALUES('Dim Product'[product_key]),
+        CALCULATE(MIN('Fact Inventory'[closing_stock])) <= 25
+    )
+)

@@ -1,0 +1,35 @@
+{
+  "name": "DataFlow360",
+  "dataColors": [
+    "#147D92",
+    "#F0A43C",
+    "#3867A6",
+    "#51A783",
+    "#C65B57",
+    "#7A68A6",
+    "#4C9CA6",
+    "#D27E3D"
+  ],
+  "background": "#F4F7FA",
+  "foreground": "#183247",
+  "tableAccent": "#147D92",
+  "visualStyles": {
+    "*": {
+      "*": {
+        "title": [
+          {
+            "fontColor": { "solid": { "color": "#183247" } },
+            "fontSize": 12,
+            "fontFamily": "Segoe UI"
+          }
+        ],
+        "labels": [
+          {
+            "color": { "solid": { "color": "#35566D" } },
+            "fontFamily": "Segoe UI"
+          }
+        ]
+      }
+    }
+  }
+}

@@ -1,4 +1,4 @@
-# DataFlow360 v0.4 cloud integration preparation
+# DataFlow360 v0.5 Business Intelligence preview
 
 > An end-to-end enterprise data engineering platform featuring automated ETL
 > pipelines, Apache Airflow orchestration, medallion architecture, PostgreSQL
@@ -7,11 +7,15 @@
 Local retail data platform with a Next.js dashboard, FastAPI API, PostgreSQL
 warehouse, Airflow orchestration, optional dbt and PySpark services, synthetic
 transaction generator, quality monitoring, and Parquet persistence. This
-branch adds opt-in Azure Data Lake Storage Gen2 support, deployable Azure Data
-Factory templates, and a Microsoft Fabric Lakehouse notebook. Cloud services
-are optional; no Azure or Fabric account was connected or provisioned for
-these changes. The sample dataset is synthetic. Compose uses development-only
-credentials and is not production hardened.
+branch includes opt-in Azure Data Lake Storage Gen2 support, deployable Azure
+Data Factory templates, a Microsoft Fabric Lakehouse notebook, and Phase 13
+Business Intelligence assets. The BI phase adds PostgreSQL reporting views,
+database-backed CSV exports, Power Query and DAX definitions, a semantic-model
+and report-page specification, and a Next.js BI page. Cloud services are
+optional; no Azure or Fabric account was connected or provisioned. Power BI
+Desktop execution and rendering are not verified. The sample dataset is
+synthetic. Compose uses development-only credentials and is not production
+hardened.
 
 Screenshots are not included yet.
 
@@ -36,6 +40,8 @@ flowchart LR
     Spark --> Parquet
     Spark --> Warehouse
     API -->|query warehouse| Warehouse
+    Warehouse -->|BI reporting views| BI[Power BI Desktop / CSV exports]
+    UI -->|dataset metadata and CSV requests| API
     UI -->|metrics, filters, and actions| API
 ```
 
@@ -139,9 +145,12 @@ sample API; PostgreSQL reads Silver. Parquet outputs are
 - `POST /cloud/storage/test`, `POST /cloud/sync`
 - `GET /cloud/storage/files/{layer}` and
   `GET /cloud/storage/files/{layer}/{object_name}` (configured storage adapter)
+- `GET /bi/datasets`, `GET /bi/model`
+- `GET /bi/exports/{dataset}.csv` (streamed reporting-view CSV)
 
-The dashboard has ten pages: Overview, Sources, Data Quality, Medallion,
-Star Schema, Analytics, Inventory, Processing, Airflow, and Cloud Integration.
+The dashboard has eleven pages: Overview, Sources, Data Quality, Medallion,
+Star Schema, Analytics, Inventory, Processing, Airflow, Cloud Integration,
+and Business Intelligence.
 Analytics filters
 are sent to the backend rather than computed from browser-side demo values.
 The Processing page reads engine availability and persisted execution metrics
@@ -151,6 +160,34 @@ PySpark, and an equivalence benchmark.
 The Cloud Integration page shows actual backend storage status, connection
 results, sync history, and stored file listings. Fabric labels are
 configuration-only and always remain unverified until run in a real workspace.
+The Business Intelligence page reads reporting-view row counts, available dbt
+models, revenue totals, refresh timestamps, and semantic-model metadata from
+the backend. It downloads CSVs from those same database views; it is not an
+embedded Power BI report.
+
+## Optional Power BI reporting
+
+- The PostgreSQL `bi` schema exposes conformed sales, inventory, customer,
+  product, date, region, supplier, pipeline, processing, and data-quality
+  reporting views. Gold remains the primary source of truth; dbt marts in
+  `analytics` are optional and are listed only when present.
+- `powerbi/power-query/` contains parameterized PostgreSQL/CSV M queries,
+  dimension/fact queries, and examples for incremental filtering, grouping,
+  merging, and appending partitioned sources.
+- `powerbi/dax/` contains 35 measures based only on available warehouse and
+  execution fields. No profit, margin, cost, or forecast measure is invented.
+- `powerbi/semantic-model/`, `powerbi/reports/`, and
+  `powerbi/themes/dataflow360-theme.json` provide the star-schema guide, data
+  dictionary, five report page specifications, and theme.
+- Setup, manual refresh, and limitations are documented in
+  [Power BI guide](docs/powerbi-guide.md),
+  [Power Query](docs/power-query.md),
+  [DAX measures](docs/dax-measures.md),
+  [semantic model](docs/semantic-model.md), and
+  [Business Intelligence](docs/business-intelligence.md).
+- No PBIX/PBIP file or database snapshot is included. Power BI Desktop was not
+  found in the checked install paths, so Power Query execution, DAX
+  evaluation, DirectQuery, refresh, and report rendering remain unverified.
 
 ## Optional Azure and Microsoft Fabric
 

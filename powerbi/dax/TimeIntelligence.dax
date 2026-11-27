@@ -1,0 +1,23 @@
+Month-to-Date Revenue = TOTALMTD([Total Revenue], 'Dim Date'[full_date])
+
+Quarter-to-Date Revenue = TOTALQTD([Total Revenue], 'Dim Date'[full_date])
+
+Year-to-Date Revenue = TOTALYTD([Total Revenue], 'Dim Date'[full_date])
+
+Previous Month Revenue =
+CALCULATE([Total Revenue], DATEADD('Dim Date'[full_date], -1, MONTH))
+
+Month-over-Month Growth =
+DIVIDE([Total Revenue] - [Previous Month Revenue], [Previous Month Revenue])
+
+Previous Year Revenue =
+CALCULATE([Total Revenue], DATEADD('Dim Date'[full_date], -1, YEAR))
+
+Year-over-Year Growth =
+DIVIDE([Total Revenue] - [Previous Year Revenue], [Previous Year Revenue])
+
+Rolling 3-Month Average Revenue =
+CALCULATE(
+    AVERAGEX(VALUES('Dim Date'[month_start]), [Total Revenue]),
+    DATESINPERIOD('Dim Date'[full_date], MAX('Dim Date'[full_date]), -3, MONTH)
+)

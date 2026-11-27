@@ -1,0 +1,34 @@
+Customer Lifetime Value =
+CALCULATE([Total Revenue], REMOVEFILTERS('Dim Date'))
+
+Repeat Customers =
+COUNTROWS(
+    FILTER(
+        VALUES('Dim Customer'[customer_key]),
+        CALCULATE(DISTINCTCOUNT('Fact Sales'[order_id])) > 1
+    )
+)
+
+Customer Purchase Frequency = DIVIDE([Total Orders], [Total Customers])
+
+Revenue per Customer = [Customer Lifetime Value]
+
+Customer Segmentation =
+VAR CustomerValue = [Customer Lifetime Value]
+VAR CustomerRank =
+    RANKX(
+        ALLSELECTED('Dim Customer'[customer_key]),
+        [Customer Lifetime Value],
+        ,
+        DESC,
+        DENSE
+    )
+VAR CustomerCount = COUNTROWS(ALLSELECTED('Dim Customer'[customer_key]))
+RETURN
+    SWITCH(
+        TRUE(),
+        ISBLANK(CustomerValue), "No sales",
+        CustomerRank <= ROUNDUP(CustomerCount * 0.2, 0), "Top 20%",
+        CustomerRank <= ROUNDUP(CustomerCount * 0.8, 0), "Middle 60%",
+        "Bottom 20%"
+    )

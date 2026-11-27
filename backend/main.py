@@ -1330,3 +1330,240 @@ def analytics(
         "monthly": monthly,
         "filters": {"categories": category_options, "regions": region_options},
     }
+
+
+BI_CORE_DATASETS = (
+    {
+        "name": "fact_sales",
+        "schema": "bi",
+        "relation": "fact_sales",
+        "description": "Gold sales fact; one row per order line (order_id, line_number).",
+        "refresh_column": "updated_at",
+        "revenue_column": "revenue",
+    },
+    {
+        "name": "fact_inventory",
+        "schema": "bi",
+        "relation": "fact_inventory",
+        "description": "Inventory snapshot; one row per product and date.",
+        "refresh_column": None,
+    },
+    {
+        "name": "fact_pipeline_execution",
+        "schema": "bi",
+        "relation": "fact_pipeline_execution",
+        "description": "One row per persisted pipeline run.",
+        "refresh_column": "finished_at",
+    },
+    {
+        "name": "fact_processing_execution",
+        "schema": "bi",
+        "relation": "fact_processing_execution",
+        "description": "One row per persisted engine execution or benchmark.",
+        "refresh_column": "created_at",
+    },
+    {
+        "name": "fact_data_quality",
+        "schema": "bi",
+        "relation": "fact_data_quality",
+        "description": "One row per pipeline run and evaluated quality rule.",
+        "refresh_column": "checked_at",
+    },
+    {
+        "name": "fact_quality_run",
+        "schema": "bi",
+        "relation": "fact_quality_run",
+        "description": "One row per pipeline run with overall quality metrics.",
+        "refresh_column": "checked_at",
+    },
+    {
+        "name": "dim_customer",
+        "schema": "bi",
+        "relation": "dim_customer",
+        "description": "Customer dimension keyed by customer_key.",
+        "refresh_column": None,
+    },
+    {
+        "name": "dim_product",
+        "schema": "bi",
+        "relation": "dim_product",
+        "description": "Product dimension with category attributes.",
+        "refresh_column": None,
+    },
+    {
+        "name": "dim_date",
+        "schema": "bi",
+        "relation": "dim_date",
+        "description": "Calendar dimension keyed by date_key.",
+        "refresh_column": None,
+    },
+    {
+        "name": "dim_region",
+        "schema": "bi",
+        "relation": "dim_region",
+        "description": "Region dimension keyed by region_key.",
+        "refresh_column": None,
+    },
+    {
+        "name": "dim_supplier",
+        "schema": "bi",
+        "relation": "dim_supplier",
+        "description": "Supplier dimension keyed by supplier_key.",
+        "refresh_column": None,
+    },
+)
+BI_DBT_MODELS = (
+    "fct_sales_line",
+    "customer_lifetime_value",
+    "daily_sales",
+    "monthly_sales",
+    "regional_revenue",
+    "product_performance",
+    "product_category_performance",
+    "category_revenue",
+    "inventory_turnover",
+    "low_stock_products",
+)
+BI_EXPORT_RELATIONS = {
+    item["name"]: (item["schema"], item["relation"])
+    for item in BI_CORE_DATASETS
+}
+BI_EXPORT_RELATIONS.update(
+    {
+        f"dbt_{model}": ("analytics", model)
+        for model in BI_DBT_MODELS
+    }
+)
+
+
+@app.get("/bi/datasets")
+def bi_datasets():
+    datasets = []
+    with connect() as conn:
+        with conn.cursor() as cursor:
+            for item in BI_CORE_DATASETS:
+                refresh = item["refresh_column"]
+                refresh_sql = f', max("{refresh}") AS last_refreshed' if refresh else (
+                    ", NULL::timestamptz AS last_refreshed"
+                )
+                revenue = item.get("revenue_column")
+                revenue_sql = f', coalesce(sum("{revenue}"), 0)::text AS revenue_total' if revenue else (
+                    ", NULL::text AS revenue_total"
+                )
+                cursor.execute(
+                    f'SELECT count(*)::bigint AS row_count{refresh_sql}{revenue_sql} '
+                    f'FROM "{item["schema"]}"."{item["relation"]}"'
+                )
+                metrics = cursor.fetchone()
+                datasets.append({**item, **metrics, "kind": "warehouse"})
+
+            cursor.execute(
+                "SELECT table_name FROM information_schema.tables "
+                "WHERE table_schema='analytics' AND table_type IN ('BASE TABLE','VIEW') "
+                "AND table_name = ANY(%s) ORDER BY table_name",
+                (list(BI_DBT_MODELS),),
+            )
+            available_dbt_models = {row["table_name"] for row in cursor.fetchall()}
+            for model in BI_DBT_MODELS:
+                if model not in available_dbt_models:
+                    continue
+                refresh_sql = (
+                    ", max(source_updated_at) AS last_refreshed"
+                    if model == "fct_sales_line"
+                    else ", NULL::timestamptz AS last_refreshed"
+                )
+                revenue_sql = (
+                    ", coalesce(sum(revenue), 0)::text AS revenue_total"
+                    if model == "fct_sales_line"
+                    else ", NULL::text AS revenue_total"
+                )
+                cursor.execute(
+                    f'SELECT count(*)::bigint AS row_count{refresh_sql}{revenue_sql} '
+                    f'FROM "analytics"."{model}"'
+                )
+                metrics = cursor.fetchone()
+                datasets.append(
+                    {
+                        "name": f"dbt_{model}",
+                        "schema": "analytics",
+                        "relation": model,
+                        "description": f"Optional dbt analytical model: {model}.",
+                        "kind": "dbt",
+                        **metrics,
+                    }
+                )
+    return {"datasets": datasets}
+
+
+@app.get("/bi/model")
+def bi_model():
+    return {
+        "primary_source": "PostgreSQL Gold warehouse; dbt analytics marts are optional reporting sources.",
+        "grain": {
+            "fact_sales": "One row per order_id and line_number.",
+            "fact_inventory": "One row per product_key and date_key.",
+            "fact_pipeline_execution": "One row per pipeline_runs.id.",
+            "fact_processing_execution": "One row per processing_executions.execution_id.",
+            "fact_data_quality": "One row per quality result/rule and pipeline run.",
+            "fact_quality_run": "One row per quality_run_summaries.pipeline_run_id.",
+        },
+        "relationships": [
+            {"many": "fact_sales", "many_key": "customer_key", "one": "dim_customer", "one_key": "customer_key"},
+            {"many": "fact_sales", "many_key": "product_key", "one": "dim_product", "one_key": "product_key"},
+            {"many": "fact_sales", "many_key": "date_key", "one": "dim_date", "one_key": "date_key"},
+            {"many": "fact_sales", "many_key": "region_key", "one": "dim_region", "one_key": "region_key"},
+            {"many": "fact_sales", "many_key": "supplier_key", "one": "dim_supplier", "one_key": "supplier_key"},
+            {"many": "fact_inventory", "many_key": "product_key", "one": "dim_product", "one_key": "product_key"},
+            {"many": "fact_inventory", "many_key": "date_key", "one": "dim_date", "one_key": "date_key"},
+            {"many": "fact_inventory", "many_key": "region_key", "one": "dim_region", "one_key": "region_key"},
+            {"many": "fact_inventory", "many_key": "supplier_key", "one": "dim_supplier", "one_key": "supplier_key"},
+            {"many": "fact_pipeline_execution", "many_key": "started_date", "one": "dim_date", "one_key": "full_date"},
+            {"many": "fact_processing_execution", "many_key": "created_date", "one": "dim_date", "one_key": "full_date"},
+            {"many": "fact_data_quality", "many_key": "checked_date", "one": "dim_date", "one_key": "full_date"},
+            {"many": "fact_quality_run", "many_key": "checked_date", "one": "dim_date", "one_key": "full_date"},
+        ],
+        "filter_direction": "Single direction from each dimension to its fact; do not enable bidirectional filtering.",
+        "dbt_models": [f"analytics.{model}" for model in BI_DBT_MODELS],
+    }
+
+
+@app.get("/bi/exports/{dataset}.csv")
+def export_bi_dataset(dataset: str):
+    relation = BI_EXPORT_RELATIONS.get(dataset)
+    if relation is None:
+        raise HTTPException(status_code=404, detail="Unknown BI dataset")
+    schema, table = relation
+    if schema == "analytics":
+        with connect() as conn:
+            with conn.cursor() as cursor:
+                cursor.execute("SELECT to_regclass(%s) AS relation", (f"{schema}.{table}",))
+                if cursor.fetchone()["relation"] is None:
+                    raise HTTPException(status_code=404, detail="dbt model is not currently available")
+
+    def rows():
+        with connect() as conn:
+            with conn.cursor(name=f"bi_export_{dataset}", row_factory=dict_row) as cursor:
+                cursor.execute(f'SELECT * FROM "{schema}"."{table}"')
+                columns = [column.name for column in cursor.description]
+                output = io.StringIO(newline="")
+                writer = csv.writer(output)
+                writer.writerow(columns)
+                yield output.getvalue()
+                output.seek(0)
+                output.truncate(0)
+                while batch := cursor.fetchmany(1000):
+                    writer.writerows(
+                        [[row[column] for column in columns] for row in batch]
+                    )
+                    yield output.getvalue()
+                    output.seek(0)
+                    output.truncate(0)
+
+    return StreamingResponse(
+        rows(),
+        media_type="text/csv; charset=utf-8",
+        headers={
+            "Content-Disposition": f'attachment; filename="dataflow360-{dataset}.csv"',
+            "Cache-Control": "no-store",
+        },
+    )
