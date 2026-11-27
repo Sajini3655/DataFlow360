@@ -43,7 +43,7 @@ jobs:
           python-version: "3.12"
           cache: pip
           cache-dependency-path: spark/requirements.txt
-      - uses: actions/setup-java@v4
+      - uses: actions/setup-java@v6
         with:
           distribution: temurin
           java-version: "17"
