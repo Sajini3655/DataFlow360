@@ -72,7 +72,7 @@ jobs:
           mkdir -p release-metadata
           printf '{"version":"%s","commit":"%s","images_published":false}\n' \
             "$GITHUB_REF_NAME" "$GITHUB_SHA" > release-metadata/release.json
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: release-metadata-${{ github.ref_name }}
           path: release-metadata/release.json
