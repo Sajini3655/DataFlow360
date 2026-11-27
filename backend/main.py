@@ -56,7 +56,11 @@ class QualityRuleUpdate(BaseModel):
 app = FastAPI(title="DataFlow 360")
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000"],
+    allow_origins=[
+        origin.strip()
+        for origin in os.getenv("CORS_ORIGINS", "http://localhost:3000").split(",")
+        if origin.strip()
+    ],
     allow_methods=["GET", "POST"],
     allow_headers=["*"],
 )
@@ -702,6 +706,11 @@ def write_parquet_snapshot():
 def queue_pipeline(incremental: bool, source: str, engine: str):
     if source not in {"csv", "json", "rest", "postgres"}:
         raise HTTPException(status_code=400, detail="Unsupported source adapter")
+    if not os.getenv("AIRFLOW_USERNAME") or not os.getenv("AIRFLOW_PASSWORD"):
+        raise HTTPException(
+            status_code=503,
+            detail="Airflow integration is not configured; set AIRFLOW_USERNAME and AIRFLOW_PASSWORD",
+        )
     if engine not in {"pandas", "pyspark", "benchmark"}:
         raise HTTPException(status_code=400, detail="Unsupported processing engine")
     if engine in {"pyspark", "benchmark"} and source != "csv":

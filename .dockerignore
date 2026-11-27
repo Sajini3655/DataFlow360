@@ -8,7 +8,11 @@
 **/*.py[cod]
 **/.venv
 **/venv
+**/dist
+**/out
+**/*.tsbuildinfo
 **/logs
+**/*.log
 **/target
 **/dbt_packages
 frontend
@@ -16,3 +20,8 @@ data/sales_50000.*
 data/parquet
 data/*.parquet
 dbt/profiles.yml
+data/cloud
+pgdata
+airflowpgdata
+airflow-data
+volumes

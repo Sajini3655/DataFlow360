@@ -25,6 +25,7 @@ services:
       AIRFLOW_USERNAME: "${AIRFLOW_USERNAME:?Set AIRFLOW_USERNAME in .env}"
       AIRFLOW_PASSWORD: "${AIRFLOW_PASSWORD:?Set AIRFLOW_PASSWORD in .env}"
       PIPELINE_INTERNAL_TOKEN: "${PIPELINE_INTERNAL_TOKEN:?Set PIPELINE_INTERNAL_TOKEN in .env}"
+      CORS_ORIGINS: "${CORS_ORIGINS:-http://localhost:3000}"
       PARQUET_DIR: /app/parquet
       SPARK_RUNNER_URL: http://spark-runner:8083
       CLOUD_STORAGE_MODE: "${CLOUD_STORAGE_MODE:-local}"
@@ -47,6 +48,11 @@ services:
     depends_on:
       db:
         condition: service_healthy
+    healthcheck:
+      test: [CMD, python, -c, "import urllib.request; urllib.request.urlopen('http://localhost:8000/health', timeout=3)"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
   airflow-db:
     image: postgres:16
     environment:

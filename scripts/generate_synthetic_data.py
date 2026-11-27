@@ -7,18 +7,34 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 DATA = ROOT / "data"
-DATA.mkdir(exist_ok=True)
 
 parser = argparse.ArgumentParser(description="Generate reproducible synthetic sales datasets.")
 parser.add_argument(
     "--records",
     type=int,
-    choices=(50000, 100000, 500000, 1000000),
     default=50000,
     help="Number of valid base transactions before controlled quality variants.",
 )
-record_count = parser.parse_args().records
-random.seed(360)
+parser.add_argument(
+    "--output-dir",
+    type=Path,
+    default=DATA,
+    help="Output directory (defaults to the project data directory).",
+)
+parser.add_argument(
+    "--seed",
+    type=int,
+    default=360,
+    help="Random seed for reproducible synthetic records.",
+)
+arguments = parser.parse_args()
+if arguments.records < 1 or arguments.records > 1_000_000:
+    parser.error("--records must be between 1 and 1000000")
+
+record_count = arguments.records
+output_dir = arguments.output_dir
+output_dir.mkdir(parents=True, exist_ok=True)
+random.seed(arguments.seed)
 start = date(2026, 1, 1)
 
 customers = [
@@ -93,22 +109,22 @@ quality.extend(
 all_rows = rows + quality
 random.shuffle(all_rows)
 
-with (DATA / "sales_50000.csv").open("w", newline="", encoding="utf-8") as f:
+with (output_dir / "sales_50000.csv").open("w", newline="", encoding="utf-8") as f:
     writer = csv.DictWriter(f, fieldnames=list(all_rows[0].keys()))
     writer.writeheader()
     writer.writerows(all_rows)
-with (DATA / "sales_50000.json").open("w", encoding="utf-8") as f:
+with (output_dir / "sales_50000.json").open("w", encoding="utf-8") as f:
     json.dump(all_rows, f)
 
-with (DATA / "customers.csv").open("w", newline="", encoding="utf-8") as f:
+with (output_dir / "customers.csv").open("w", newline="", encoding="utf-8") as f:
     writer = csv.writer(f)
     writer.writerow(["customer_id","customer_name","region"])
     writer.writerows(customers)
-with (DATA / "suppliers.csv").open("w", newline="", encoding="utf-8") as f:
+with (output_dir / "suppliers.csv").open("w", newline="", encoding="utf-8") as f:
     writer = csv.writer(f)
     writer.writerow(["supplier_id","supplier_name","region"])
     writer.writerows(suppliers)
-with (DATA / "products.csv").open("w", newline="", encoding="utf-8") as f:
+with (output_dir / "products.csv").open("w", newline="", encoding="utf-8") as f:
     writer = csv.writer(f)
     writer.writerow(["product_id","product_name","category","unit_price","opening_stock","supplier_id"])
     writer.writerows(products)

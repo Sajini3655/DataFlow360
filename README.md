@@ -1,23 +1,84 @@
-# DataFlow360 v0.5 Business Intelligence preview
+# DataFlow360
 
 > An end-to-end enterprise data engineering platform featuring automated ETL
 > pipelines, Apache Airflow orchestration, medallion architecture, PostgreSQL
 > data warehousing, data quality monitoring, and interactive business analytics.
 
-Local retail data platform with a Next.js dashboard, FastAPI API, PostgreSQL
-warehouse, Airflow orchestration, optional dbt and PySpark services, synthetic
-transaction generator, quality monitoring, and Parquet persistence. This
-branch includes opt-in Azure Data Lake Storage Gen2 support, deployable Azure
-Data Factory templates, a Microsoft Fabric Lakehouse notebook, and Phase 13
-Business Intelligence assets. The BI phase adds PostgreSQL reporting views,
-database-backed CSV exports, Power Query and DAX definitions, a semantic-model
-and report-page specification, and a Next.js BI page. Cloud services are
-optional; no Azure or Fabric account was connected or provisioned. Power BI
-Desktop execution and rendering are not verified. The sample dataset is
-synthetic. Compose uses development-only credentials and is not production
-hardened.
+DataFlow360 is a retail data-engineering portfolio project. It demonstrates
+how synthetic transactions can be ingested, validated, transformed,
+orchestrated, stored in a PostgreSQL warehouse, and exposed to analytics
+through a backend-driven dashboard.
 
-Screenshots are not included yet.
+The project is intended to make data quality, incremental loading, warehouse
+grain, lineage, and optional platform integrations visible in one reproducible
+local workflow. It is not a production-deployed enterprise service. The
+development Compose stack uses local credentials and an Airflow debug
+webserver; external cloud services and Power BI Desktop are unverified.
+
+## Contents
+
+- [Features and data lifecycle](#features-and-data-lifecycle)
+- [Technology stack](#technology-stack)
+- [Architecture](#architecture)
+- [Run locally](#run-from-a-fresh-checkout)
+- [Testing and CI/CD](#testing-and-checks)
+- [Portfolio deployment](#portfolio-deployment)
+- [Power BI reporting](#optional-power-bi-reporting)
+- [Verification and known limitations](#verification-status-and-known-limitations)
+- [Documentation map](#documentation-map)
+
+## Business problem and objectives
+
+Retail transaction sources may contain duplicates, missing values, invalid
+quantities, malformed prices, or schema changes. The project demonstrates a
+repeatable path to detect and quarantine these cases, load accepted data at a
+well-defined grain, preserve analytical history, and provide database-backed
+reporting.
+
+Objectives:
+
+- Keep ingestion, transformations, and warehouse updates repeatable.
+- Make data quality outcomes and execution state observable.
+- Preserve legitimate order lines and prevent duplicate warehouse records.
+- Keep optional processing/cloud/BI integrations separate from local mode.
+- Document which integrations were actually run and which remain design assets.
+
+## Features and data lifecycle
+
+1. **Ingest:** local CSV, JSON, REST, and PostgreSQL adapters; optional ADLS
+   adapter and ADF templates.
+2. **Validate:** configurable quality checks, schema drift observations, and
+   rejected-row quarantine.
+3. **Transform:** normalize rows and calculate revenue without inventing cost
+   or margin data.
+4. **Load:** persist Bronze/Silver/Gold and star-schema facts in PostgreSQL
+   using the `(order_id, line_number)` sales grain.
+5. **Orchestrate:** queue actual Airflow DAG runs, execute work asynchronously,
+   and poll actual DAG/task states.
+6. **Analyze:** optional dbt marts, full-snapshot Parquet outputs, reporting
+   views, CSV exports, and Power BI source assets.
+7. **Observe:** Next.js pages read API/database metrics and persisted run,
+   quality, inventory, and processing results.
+
+### Technology stack
+
+| Area | Technology |
+|---|---|
+| API and ETL | Python 3.12, FastAPI, Pandas |
+| Frontend | Next.js 15, React 19, TypeScript |
+| Warehouse | PostgreSQL 16, SQL, star schema |
+| Orchestration | Apache Airflow 2.10.5 |
+| Analytics | dbt Core 1.8.8, dbt-postgres 1.8.2 |
+| Optional distributed processing | Java 17, PySpark 3.5.6 |
+| File format | Parquet via PyArrow |
+| Local infrastructure | Docker Compose |
+| Optional integration assets | Azure Data Lake Gen2, Azure Data Factory, Fabric, Power BI |
+
+Version values above reflect previously verified local runs, not a guarantee
+that every optional service is running in a new checkout.
+
+Screenshots are not included. The capture status and page checklist are in
+[docs/screenshots](docs/screenshots/README.md).
 
 ## Architecture
 
@@ -43,6 +104,26 @@ flowchart LR
     Warehouse -->|BI reporting views| BI[Power BI Desktop / CSV exports]
     UI -->|dataset metadata and CSV requests| API
     UI -->|metrics, filters, and actions| API
+```
+
+For detailed ETL, medallion, warehouse, Airflow, dbt, Spark, data-quality,
+cloud, Power BI, and CI/CD diagrams, see [architecture documentation](docs/architecture.md).
+
+## Repository structure
+
+```text
+backend/                 FastAPI API, ETL, adapters, tests
+frontend/                Next.js dashboard and standalone Docker build
+warehouse/               PostgreSQL initialization SQL and migrations
+airflow/dags/             Airflow DAG
+dbt/                      dbt models, seeds, and tests
+spark/                    Optional Spark runner and equivalence tests
+azure/                    ADLS adapter support, ADF templates, Fabric notebook
+powerbi/                  M queries, DAX, semantic model, report designs, theme
+scripts/                  Reproducible synthetic data generator
+docs/                     Architecture, setup, operations, and portfolio guides
+.github/workflows/        CI, security, Docker, optional integration, release
+compose.deploy.yml        Lightweight demonstration stack
 ```
 
 The small `data/sales.csv` fixture is tracked. The 50,000-row generated CSV and
@@ -189,6 +270,30 @@ embedded Power BI report.
   found in the checked install paths, so Power Query execution, DAX
   evaluation, DirectQuery, refresh, and report rendering remain unverified.
 
+## CI/CD architecture
+
+Pull requests and pushes to `main` and `feature/**` have workflows for backend
+and isolated-PostgreSQL tests, frontend type/build checks, ETL/dbt checks,
+Docker validation, and dependency/secret scans. Airflow DAG import and small
+PySpark equivalence checks are manual to avoid heavyweight integrations on
+every commit. Version tags trigger release validation and Docker build
+verification; GHCR publishing requires a separate manual opt-in. No automatic
+deployment is configured. See [CI/CD guide](docs/ci-cd-guide.md).
+
+## Documentation map
+
+- [Architecture diagrams](docs/architecture.md)
+- [Deployment guide](docs/deployment-guide.md)
+- [CI/CD guide](docs/ci-cd-guide.md)
+- [Security notes](docs/security.md)
+- [Testing guide](docs/testing.md)
+- [Troubleshooting](docs/troubleshooting.md)
+- [Demo guide](docs/demo-guide.md)
+- [Project limitations](docs/project-limitations.md)
+- [Interview guide](docs/interview-guide.md)
+- [Portfolio materials](docs/portfolio.md)
+- [Screenshot checklist](docs/screenshots/README.md)
+
 ## Optional Azure and Microsoft Fabric
 
 - The `StorageAdapter` defaults to local storage under ignored `data/cloud/`.
@@ -241,9 +346,42 @@ source files.
 ```powershell
 docker compose exec backend python /app/scripts/generate_synthetic_data.py --records 50000
 docker compose exec backend python -m unittest discover -s tests
-cd frontend
+Set-Location frontend
+npm ci
+npm run typecheck
 npm run build
 ```
+
+For a small fixture without writing into the tracked sample-data directory:
+
+```powershell
+python scripts/generate_synthetic_data.py --records 100 --output-dir $env:TEMP\dataflow-fixture
+```
+
+GitHub Actions definitions cover backend tests against isolated PostgreSQL,
+frontend type/build checks, ETL/data-quality/upsert checks, dbt parse/build,
+Compose validation, image builds, and security scans. Airflow DAG import and
+small Spark checks are manual workflows. Workflows are locally configured but
+have not yet been verified by a remote GitHub Actions run on this branch.
+Details: [CI/CD guide](docs/ci-cd-guide.md) and [testing guide](docs/testing.md).
+
+## Portfolio deployment
+
+[`compose.deploy.yml`](compose.deploy.yml) runs only the frontend, API, and
+PostgreSQL, with persistent named volumes for PostgreSQL, Parquet, and local
+cloud-adapter data. It binds web/API ports to loopback by default and does not
+publish PostgreSQL. TLS, a reverse proxy, authentication gateway, backup
+automation, and monitoring must be configured separately.
+
+```powershell
+Copy-Item .env.deploy.example .env.deploy
+# Replace all secrets and example origins before use.
+docker compose --env-file .env.deploy -f compose.deploy.yml config --quiet
+docker compose --env-file .env.deploy -f compose.deploy.yml up --build -d
+```
+
+This is a portfolio demonstration configuration, not a production deployment.
+See [deployment guide](docs/deployment-guide.md) and [security notes](docs/security.md).
 
 Useful checks:
 
@@ -281,6 +419,18 @@ docker compose exec db psql -U dataflow -d dataflow -c "select count(*) from sil
   existing records; the latest full run itself accepted 50,000 rows. The
   `quantity_range` rule allows a 2% fixture failure rate; the observed 750 of
   52,750 rows (1.4218%) passed that configured threshold.
+- Phase 13 added eleven `bi` reporting views plus optional dbt model
+  discovery and CSV export endpoints. In the verified local database,
+  `bi.fact_sales` and `analytics.fct_sales_line` each contained 50,002 lines
+  and reconciled to revenue **114,850,077.34**; inventory contained 3,024
+  rows, persisted processing executions 4, data-quality results 55, and
+  quality summaries 5. Migration `006_business_intelligence.sql` was applied.
+  The focused BI regression tests passed **4/4**; frontend TypeScript
+  validation and production build passed. The build generated all eleven
+  application routes.
+- Power BI source assets include **16** Power Query files, **35** DAX
+  measures, semantic-model/report specifications, and a theme. These source
+  files have not been evaluated by Power BI Desktop or a DAX/M engine.
 - Parquet snapshots are full-table rewrites after each successful ETL run and
   can become expensive as data grows. CSV/JSON are local-file adapters; the
   REST and PostgreSQL adapters target local demonstration services.
@@ -300,10 +450,11 @@ docker compose exec db psql -U dataflow -d dataflow -c "select count(*) from sil
   passed. The Cloud Integration page was served with HTTP 200 and browser
   inspection confirmed backend-derived local status, three dataset sizes,
   stored object listing, operation history, Azure unavailable, and Fabric
-  not-configured/unrun status. The production build compiled and passed its
-  type-check stage but timed out after 300 seconds during Next.js page-data
-  collection; a complete production build is therefore **not verified**.
-  The frontend server was restarted and `/cloud` returned HTTP 200.
+  not-configured/unrun status. The v0.4 production build compiled and passed
+  type checking but timed out during page-data collection. The subsequent
+  v0.5 production build completed successfully, including static generation
+  and type validation; `/business-intelligence` returned HTTP 200 and browser
+  inspection showed live backend values.
 - The `/cloud/sync` endpoint only synchronizes the current Parquet layer
   snapshots. ADF templates require an existing configured factory, network
   access, Key Vault secrets, pre-created storage file systems, and database
@@ -314,5 +465,11 @@ docker compose exec db psql -U dataflow -d dataflow -c "select count(*) from sil
   execution metadata does not replace that DAG decomposition.
 - `.env.example` contains placeholders. Keep local secrets in the ignored
   `.env`, never commit it, and use a secrets manager outside local development.
-  Cloud resources were not deployed; Power BI and other BI integrations are
-  not part of this implementation.
+  Cloud resources were not deployed. Power BI Desktop, PBIX/PBIP creation,
+  M/DAX execution, DirectQuery, refresh, and report rendering remain
+  unverified.
+- Phase 14 CI workflows and Phase 15 deployment assets in
+  `feature/production-readiness` are source changes only until this branch is
+  committed/published and GitHub executes its workflows. See
+  [project limitations](docs/project-limitations.md); no production
+  deployment or remote CI result is claimed.

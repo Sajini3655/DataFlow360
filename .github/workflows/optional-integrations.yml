@@ -1,0 +1,53 @@
+name: Optional integration smoke tests
+
+on:
+  workflow_dispatch:
+    inputs:
+      run_spark_smoke:
+        description: Run the small Pandas/PySpark equivalence fixture (not the 50,000-row benchmark)
+        type: boolean
+        required: true
+        default: false
+      run_airflow_import:
+        description: Pull the official Airflow image and validate DAG imports
+        type: boolean
+        required: true
+        default: false
+
+permissions:
+  contents: read
+
+jobs:
+  airflow-dag-import:
+    if: ${{ inputs.run_airflow_import }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Import DAG using the repository Airflow image
+        run: |
+          docker run --rm \
+            -v "$GITHUB_WORKSPACE/airflow/dags:/opt/airflow/dags:ro" \
+            -e AIRFLOW__CORE__LOAD_EXAMPLES=false \
+            apache/airflow:2.10.5-python3.12 \
+            python -c "from dataflow360_pipeline import dag; assert dag.dag_id == 'dataflow360_daily_pipeline'"
+
+  spark-smoke:
+    if: ${{ inputs.run_spark_smoke }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: spark/requirements.txt
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - name: Install Spark test dependencies
+        run: python -m pip install -r spark/requirements.txt
+      - name: Run small Spark equivalence fixture
+        run: python -m unittest discover -s spark/tests -v
