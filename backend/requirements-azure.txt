@@ -1,4 +1,4 @@
 # Optional cloud-storage dependencies. Install only when CLOUD_STORAGE_MODE=azure.
-azure-identity>=1.19,<2
+azure-identity>=1.27.0,<2
 azure-storage-file-datalake>=12.18,<13
 azure-core>=1.30,<2
