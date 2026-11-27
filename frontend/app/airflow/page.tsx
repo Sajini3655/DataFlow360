@@ -44,9 +44,14 @@ type Status = {
   } | null;
 };
 
-function elapsed(seconds?: number | null) {
-  if (seconds == null) return 'In progress';
-  return `${Math.floor(seconds / 60)}m ${Math.floor(seconds % 60)}s`;
+const terminalTaskStates = new Set(['success', 'failed', 'skipped', 'upstream_failed', 'removed']);
+
+function elapsed(seconds?: number | null, startDate?: string | null, endDate?: string | null) {
+  const duration = seconds ?? (
+    startDate && endDate ? (Date.parse(endDate) - Date.parse(startDate)) / 1000 : null
+  );
+  if (duration == null || !Number.isFinite(duration)) return endDate ? '—' : 'In progress';
+  return `${Math.floor(duration / 60)}m ${Math.floor(duration % 60)}s`;
 }
 
 export default function Airflow() {
@@ -120,7 +125,9 @@ export default function Airflow() {
   }
 
   const state = status?.state || run?.state || 'Ready';
-  const completedTasks = status?.tasks.filter((task) => task.state === 'success').length || 0;
+  const completedTasks = status?.tasks.filter(
+    (task) => task.state !== null && terminalTaskStates.has(task.state),
+  ).length || 0;
   return (
     <div className="shell">
       <aside>
@@ -145,7 +152,7 @@ export default function Airflow() {
         <section className="metrics">
           <article><small>RUN STATE</small><h2>{state}</h2></article>
           <article><small>DAG RUN ID</small><h2 className="compact">{run?.dag_run_id || '—'}</h2></article>
-          <article><small>EXECUTION DURATION</small><h2>{elapsed(status?.duration)}</h2></article>
+          <article><small>EXECUTION DURATION</small><h2>{elapsed(status?.duration, status?.start_date, status?.end_date)}</h2></article>
           <article><small>TRIGGER</small><h2>{status?.scheduled_run ? 'Scheduled' : run ? 'Manual' : '—'}</h2></article>
         </section>
         <article>
@@ -163,7 +170,7 @@ export default function Airflow() {
                 <td>{task.task_id}</td>
                 <td>{task.state || 'queued'}</td>
                 <td>{task.try_number ?? '—'} / {task.max_tries ?? '—'}</td>
-                <td>{elapsed(task.duration)}</td>
+                <td>{elapsed(task.duration, task.start_date, task.end_date)}</td>
                 <td>
                   {task.log_url && <a href={task.log_url} target="_blank" rel="noreferrer">Task log</a>}
                   {task.state === 'failed' && <button disabled={retryingTask === task.task_id} onClick={() => void retry(task.task_id)}>
@@ -176,7 +183,7 @@ export default function Airflow() {
         </article>}
         {status?.pipeline_execution && <article>
           <h3>ETL stage timeline</h3>
-          <p>Engine: {status.pipeline_execution.engine} · Rows read: {status.pipeline_execution.rows_read} ·
+          <p>Pipeline state: {status.pipeline_execution.state} · Engine: {status.pipeline_execution.engine} · Rows read: {status.pipeline_execution.rows_read} ·
             Accepted: {status.pipeline_execution.accepted} · Rejected: {status.pipeline_execution.rejected}</p>
           {status.pipeline_execution.error_message && <div className="error">{status.pipeline_execution.error_message}</div>}
           {status.pipeline_execution.quality && <p>Quality score: {Number(status.pipeline_execution.quality.overall_score).toFixed(2)}%</p>}

@@ -73,6 +73,10 @@ def _raw_bronze(spark, input_path, output_dir):
 
 def transform_bronze(spark, input_path, output_dir):
     raw = _raw_bronze(spark, input_path, output_dir)
+    return _transform_raw(raw)
+
+
+def _transform_raw(raw):
     columns = set(raw.columns)
     if "order_id" not in columns:
         raise ValueError("Bronze dataset is missing order_id")
@@ -161,10 +165,13 @@ def run_spark(spark, input_path, output_dir, benchmark_id=None):
     started = time.perf_counter()
     output = Path(output_dir)
     output.mkdir(parents=True, exist_ok=True)
-    raw, accepted, rejected, gold = transform_bronze(spark, input_path, output)
+    raw = _raw_bronze(spark, input_path, output)
+    input_rows = raw.count()
+    shuffle_partitions = max(4, min(200, (input_rows + 24_999) // 25_000))
+    spark.conf.set("spark.sql.shuffle.partitions", str(shuffle_partitions))
+    raw, accepted, rejected, gold = _transform_raw(raw)
     accepted.cache()
     rejected.cache()
-    input_rows = raw.count()
     accepted_rows = accepted.count()
     rejected_rows = rejected.count()
     revenue_row = accepted.agg(F.coalesce(F.sum("revenue"), F.lit(0)).alias("revenue")).first()
@@ -172,9 +179,9 @@ def run_spark(spark, input_path, output_dir, benchmark_id=None):
     accepted_path = output / "silver_sales"
     rejected_path = output / "rejected_sales"
     gold_path = output / "gold_sales"
-    accepted.write.mode("overwrite").partitionBy("order_date").parquet(str(accepted_path))
-    rejected.write.mode("overwrite").parquet(str(rejected_path))
-    gold.write.mode("overwrite").parquet(str(gold_path))
+    accepted.repartition(shuffle_partitions).write.mode("overwrite").parquet(str(accepted_path))
+    rejected.coalesce(shuffle_partitions).write.mode("overwrite").parquet(str(rejected_path))
+    gold.coalesce(shuffle_partitions).write.mode("overwrite").parquet(str(gold_path))
     duration = time.perf_counter() - started
     result = {
         "engine": "pyspark",

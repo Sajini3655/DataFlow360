@@ -88,7 +88,7 @@ services:
       - ./airflow/dags:/opt/airflow/dags
       - airflowlogs:/opt/airflow/logs
     ports: ['8080:8080']
-    command: webserver
+    command: ['webserver', '--debug']
     depends_on:
       airflow-db:
         condition: service_healthy
@@ -178,6 +178,9 @@ services:
       context: .
       dockerfile: spark/Dockerfile
     profiles: ['spark']
+    volumes:
+      - ./data:/app/data
+      - ./data/parquet:/app/parquet
     command:
       - spark-class
       - org.apache.spark.deploy.worker.Worker

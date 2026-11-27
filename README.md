@@ -170,34 +170,37 @@ docker compose exec db psql -U dataflow -d dataflow -c "select count(*) from sil
 
 ## Verification status and known limitations
 
-- `.env.example` contains placeholders only. Copy it to `.env`, replace every
-  placeholder, and never commit `.env` or use development credentials in a
-  shared or production deployment.
-- The internal pipeline token is configured locally through `.env`; use a
-  secrets manager for non-local environments.
+- Local verification completed: the backend suite passed **21 tests**,
+  including the PostgreSQL Gold upsert integration test; the frontend
+  production build/type check passed; Docker Compose validation passed; and all
+  nine dashboard routes returned HTTP 200.
+- dbt 1.8.8 / adapter 1.8.2: `dbt debug` passed, `dbt build` passed **41/41**,
+  `dbt test` passed **19/19**, and docs generation succeeded. Incremental
+  insert/update and idempotency checks passed. These commands were run
+  separately; the optional Airflow dbt task remains disabled by default.
+- Spark: Java 17 and Spark/PySpark 3.5.6 were verified. The 50,000-row
+  equivalence benchmark passed. The recorded runs processed 52,750 rows
+  (50,000 accepted, 2,750 rejected): Pandas completed in 5.71s
+  (9,236 rows/s) and PySpark in 91.63s (576 rows/s). These are local,
+  environment-specific measurements; PySpark was slower in this benchmark.
+- Airflow: a real full ETL DAG run succeeded after retry, reading 52,750 rows
+  and accepting 50,000 while rejecting 2,750; backend status polling returned
+  actual task states. The downstream `dbt_build` task was skipped because
+  `DBT_ENABLED` is false. Local runs currently use Airflow's `webserver
+  --debug` mode after the standard Gunicorn startup exceeded its timeout; the
+  underlying Gunicorn startup cause remains unresolved, so this is not a
+  production webserver configuration.
+- The current verified PostgreSQL layer counts are 155,603 Bronze,
+  50,002 Silver, and 50,002 Gold rows. The two extra Silver/Gold rows are
+  existing records; the latest full run itself accepted 50,000 rows. The
+  `quantity_range` rule allows a 2% fixture failure rate; the observed 750 of
+  52,750 rows (1.4218%) passed that configured threshold.
 - Parquet snapshots are full-table rewrites after each successful ETL run and
-  can become expensive as data grows.
-- CSV/JSON are local-file adapters; the REST and PostgreSQL adapters target the
-  local demonstration services.
-- Airflow metadata initialization and PostgreSQL health checks previously
-  succeeded, but the webserver exited during Gunicorn startup with `No response
-  from gunicorn master`. The underlying Gunicorn startup cause remains
-  unresolved. Live DAG triggering, status polling, retries, dbt orchestration,
-  Spark execution, and end-to-end ETL are therefore not verified in this
-  workspace. Inspect `docker compose logs airflow-webserver` before attempting
-  any restart; database volumes are not part of this issue.
-- The Airflow DAG currently has one ETL task and an optional downstream dbt
-  task; it does not yet expose the ten ETL stages as separate Airflow tasks.
-  Backend stage-level execution metadata does not replace that requested DAG
-  task decomposition.
-- The dbt image built and `dbt parse` passed with dbt 1.8.8 and adapter 1.8.2.
-  Database-backed model builds, tests, incremental reruns, and docs generation
-  have not been run. The Spark image build was stopped during the large PySpark
-  package installation, so Spark execution and benchmark results are
-  unverified. Database migrations and real orchestrated jobs also remain
-  unverified in this workspace.
-- The generated dataset includes controlled errors. Configurable quality
-  thresholds permit expected fixture error rates; threshold failures retain
-  Bronze/quarantine audit records and roll back warehouse changes without
-  advancing the watermark.
-- Cloud deployment and BI integrations are not part of this implementation.
+  can become expensive as data grows. CSV/JSON are local-file adapters; the
+  REST and PostgreSQL adapters target local demonstration services.
+- The Airflow DAG has one ETL task and an optional downstream dbt task; it does
+  not expose each ETL stage as a separate Airflow task. Backend stage-level
+  execution metadata does not replace that DAG decomposition.
+- `.env.example` contains placeholders. Keep local secrets in the ignored
+  `.env`, never commit it, and use a secrets manager outside local development.
+  Cloud deployment and BI integrations are not part of this implementation.

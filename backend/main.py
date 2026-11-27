@@ -28,7 +28,7 @@ from data_quality import (
     persist_quality_results,
     validate_rule_config,
 )
-from medallion import write_parquet_files
+from medallion import parquet_layer_status, write_parquet_files
 from warehouse_loader import load_silver_rows
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -358,8 +358,7 @@ def execute_pipeline(
         raise
 
     elapsed = time.perf_counter() - started
-    output_dir = Path(os.getenv("PARQUET_DIR", str(ROOT / "data" / "parquet")))
-    output_bytes = sum(path.stat().st_size for path in output_dir.rglob("*.parquet"))
+    output_bytes = sum(Path(item["path"]).stat().st_size for item in parquet.values())
     with connect() as conn:
         with conn.cursor() as cursor:
             cursor.execute(
@@ -987,32 +986,7 @@ def medallion_status():
             )
             lineage_events = cursor.fetchall()
     output_dir = Path(os.getenv("PARQUET_DIR", str(ROOT / "data" / "parquet")))
-    files = []
-    for layer in ("bronze_sales", "silver_sales", "gold_sales"):
-        layer_files = list(output_dir.glob(f"{layer}.parquet"))
-        spark_runs = output_dir / "spark" / "runs"
-        if spark_runs.is_dir():
-            for run_dir in spark_runs.iterdir():
-                layer_dir = run_dir / layer
-                if layer_dir.is_dir():
-                    layer_files.extend(layer_dir.rglob("*.parquet"))
-        layer_files.sort()
-        row_count = 0
-        if layer_files:
-            row_count = sum(parquet_reader.read_metadata(path).num_rows for path in layer_files)
-        files.append(
-            {
-                "layer": layer.removesuffix("_sales"),
-                "exists": bool(layer_files),
-                "files": [str(path.relative_to(output_dir)) for path in layer_files],
-                "rows": row_count,
-                "bytes": sum(path.stat().st_size for path in layer_files),
-                "last_updated": max(
-                    (path.stat().st_mtime for path in layer_files),
-                    default=None,
-                ),
-            }
-        )
+    files = parquet_layer_status(output_dir)
     return {
         "database": database_counts,
         "parquet": files,

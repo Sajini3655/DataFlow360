@@ -6,7 +6,8 @@ WHERE rule_id IN (
     'unique_business_key',
     'valid_quantity',
     'valid_unit_price',
-    'valid_order_date'
+    'valid_order_date',
+    'quantity_range'
 )
 AND threshold_percent = 0
 AND NOT EXISTS (

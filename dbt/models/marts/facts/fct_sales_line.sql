@@ -2,7 +2,8 @@
     config(
         materialized='incremental',
         unique_key=['order_id', 'line_number'],
-        incremental_strategy='delete+insert'
+        incremental_strategy='delete+insert',
+        on_schema_change='append_new_columns'
     )
 }}
 
@@ -11,6 +12,7 @@ select
     line_number,
     order_date,
     customer_id,
+    customer_name,
     customer_key,
     product_id,
     product_key,
