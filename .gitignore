@@ -37,6 +37,7 @@ test-reports/
 .env
 .env.*
 !.env.example
+!.env.deploy.example
 !.env.template
 *.pem
 *.key

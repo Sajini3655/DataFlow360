@@ -45,6 +45,11 @@ jobs:
       - name: Apply warehouse schema and migrations
         working-directory: backend
         run: python -c "import main"
+      - name: Seed a small warehouse fixture
+        working-directory: backend
+        run: |
+          python ../scripts/generate_synthetic_data.py --records 100
+          python -c "import main; main.execute_pipeline(incremental=False, source='csv', engine='pandas')"
       - name: Run unit and PostgreSQL integration tests
         working-directory: backend
         run: python -m xmlrunner discover -s tests -v -o test-reports
