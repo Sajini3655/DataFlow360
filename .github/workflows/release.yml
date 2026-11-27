@@ -54,7 +54,7 @@ jobs:
         working-directory: backend
         run: |
           python -c "import main"
-          python ../scripts/generate_synthetic_data.py --records 100
+          python ../scripts/generate_synthetic_data.py --records 50000
           python -c "import main; main.execute_pipeline(incremental=False, source='csv', engine='pandas')"
           python -m unittest discover -s tests -v
       - name: Validate frontend

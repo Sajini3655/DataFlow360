@@ -71,7 +71,7 @@ warehouse, dbt, data quality, Parquet, and optional analytics integrations.
 
 Previously reported local execution/verification includes Python 3.12,
 FastAPI, PostgreSQL 16, Docker Compose, Node.js/Next.js, Apache Airflow 2.10.5,
-dbt 1.8.8 with dbt-postgres 1.8.2, Java 17, PySpark 3.5.6, Pandas 2.2.3, and
+dbt 1.12.7 with dbt-postgres 1.11.0, Java 17, PySpark 3.5.6, Pandas 2.2.3, and
 PyArrow 18.1.0. The v0.5 BI change also passed local frontend build/type
 checks and focused database tests. Refer to README verification notes for
 dated counts and measurements; prior results are not a guarantee of current

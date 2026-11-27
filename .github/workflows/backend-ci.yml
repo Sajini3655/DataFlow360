@@ -48,7 +48,7 @@ jobs:
       - name: Seed a small warehouse fixture
         working-directory: backend
         run: |
-          python ../scripts/generate_synthetic_data.py --records 100
+          python ../scripts/generate_synthetic_data.py --records 50000
           python -c "import main; main.execute_pipeline(incremental=False, source='csv', engine='pandas')"
       - name: Run unit and PostgreSQL integration tests
         working-directory: backend

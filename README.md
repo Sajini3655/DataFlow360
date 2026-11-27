@@ -68,7 +68,7 @@ Objectives:
 | Frontend | Next.js 15, React 19, TypeScript |
 | Warehouse | PostgreSQL 16, SQL, star schema |
 | Orchestration | Apache Airflow 2.10.5 |
-| Analytics | dbt Core 1.8.8, dbt-postgres 1.8.2 |
+| Analytics | dbt Core 1.12.7, dbt-postgres 1.11.0 |
 | Optional distributed processing | Java 17, PySpark 3.5.6 |
 | File format | Parquet via PyArrow |
 | Local infrastructure | Docker Compose |
